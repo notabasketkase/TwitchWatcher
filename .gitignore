@@ -14,3 +14,6 @@ __pycache__/
 
 # --- Editor / tooling local settings ---
 .claude/
+
+# --- Private planning notes — never publish ---
+*.private.md
