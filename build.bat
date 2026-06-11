@@ -16,6 +16,7 @@ python -m PyInstaller --noconfirm --clean --onefile --windowed ^
   --name TwitchWatcher ^
   --icon "icon.ico" ^
   --add-data "TwitchWatcher_Setup_Guide.pdf;." ^
+  --add-data "icon.ico;." ^
   --hidden-import plyer.platforms.win.notification ^
   --hidden-import keyring.backends.Windows ^
   "twitch_live_watch.py"

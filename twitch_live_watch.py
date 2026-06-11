@@ -159,6 +159,16 @@ class TwitchWatcherApp:
         self.root.title("Twitch Watcher")
         self.root.geometry("700x580")
 
+        # Set the window/taskbar icon (falls back silently if not found).
+        # When frozen, icon.ico is bundled and extracted to sys._MEIPASS.
+        try:
+            icon_dir = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+            icon_path = os.path.join(icon_dir, "icon.ico")
+            if os.path.exists(icon_path):
+                self.root.iconbitmap(icon_path)
+        except Exception:
+            pass
+
         self.cfg = load_config()
         self.token               = None
         self.opened              = set()
