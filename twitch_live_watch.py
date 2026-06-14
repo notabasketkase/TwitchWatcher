@@ -79,7 +79,7 @@ DEFAULT_CONFIG = {
     "client_id": os.environ.get("TWITCH_CLIENT_ID", ""),
     "poll_interval": 300,
     "autostart": False,     # if True, start watching automatically on launch
-    "streamers": [],        # [{"name": "...", "drops_only": false, "group": "General"}]
+    "streamers": [],        # [{"name": "...", "drops_only": false, "auto_open": true, "group": "General"}]
     "drops_watch_games": [],
 }
 
@@ -91,9 +91,10 @@ def load_config():
                 for k, v in DEFAULT_CONFIG.items():
                     data.setdefault(k, v)
                 data.pop("client_secret", None)
-                # Migrate old streamers that don't have a group field
+                # Migrate old streamers missing newer fields
                 for s in data.get("streamers", []):
                     s.setdefault("group", DEFAULT_GROUP)
+                    s.setdefault("auto_open", True)
                 return data
         except Exception:
             pass
@@ -341,21 +342,29 @@ class TwitchWatcherApp:
 
         self.drops_only_var = tk.BooleanVar()
         ttk.Checkbutton(top, text="Drops only", variable=self.drops_only_var).pack(side=tk.LEFT, padx=4)
+
+        # Auto-open defaults ON, so new streamers behave like before unless unticked
+        self.auto_open_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(top, text="Auto-open", variable=self.auto_open_var).pack(side=tk.LEFT, padx=4)
+
         ttk.Button(top, text="Add", command=self._add_streamer).pack(side=tk.LEFT, padx=4)
 
-        cols = ("name", "group", "drops_only")
+        cols = ("name", "group", "drops_only", "auto_open")
         self.streamer_tree = ttk.Treeview(self.tab_stream, columns=cols, show="headings", height=13)
         self.streamer_tree.heading("name",      text="Username")
         self.streamer_tree.heading("group",     text="Group")
         self.streamer_tree.heading("drops_only",text="Drops Only")
-        self.streamer_tree.column("name",       width=200)
-        self.streamer_tree.column("group",      width=160)
-        self.streamer_tree.column("drops_only", width=100, anchor="center")
+        self.streamer_tree.heading("auto_open", text="Auto-Open")
+        self.streamer_tree.column("name",       width=190)
+        self.streamer_tree.column("group",      width=150)
+        self.streamer_tree.column("drops_only", width=90, anchor="center")
+        self.streamer_tree.column("auto_open",  width=90, anchor="center")
         self.streamer_tree.pack(fill=tk.BOTH, expand=True, padx=8, pady=4)
 
         bot = ttk.Frame(self.tab_stream)
         bot.pack(fill=tk.X, padx=8, pady=4)
         ttk.Button(bot, text="Toggle Drops Only", command=self._toggle_drops_only).pack(side=tk.LEFT, padx=4)
+        ttk.Button(bot, text="Toggle Auto-Open",  command=self._toggle_auto_open).pack(side=tk.LEFT, padx=4)
         ttk.Button(bot, text="Edit Group",        command=self._edit_group).pack(side=tk.LEFT, padx=4)
         ttk.Button(bot, text="Remove Selected",   command=self._remove_streamer).pack(side=tk.LEFT, padx=4)
 
@@ -365,7 +374,8 @@ class TwitchWatcherApp:
             self.streamer_tree.insert("", tk.END, values=(
                 s["name"],
                 s.get("group", DEFAULT_GROUP) or DEFAULT_GROUP,
-                "Yes" if s.get("drops_only") else "No"
+                "Yes" if s.get("drops_only") else "No",
+                "Yes" if s.get("auto_open", True) else "No"
             ))
 
     def _add_streamer(self):
@@ -379,11 +389,13 @@ class TwitchWatcherApp:
         self.cfg["streamers"].append({
             "name":      name,
             "drops_only": self.drops_only_var.get(),
+            "auto_open": self.auto_open_var.get(),
             "group":     group,
         })
         save_config(self.cfg)
         self.new_streamer_var.set("")
         self.drops_only_var.set(False)
+        self.auto_open_var.set(True)
         self._populate_streamers()
         self._rebuild_live_rows()
 
@@ -405,6 +417,17 @@ class TwitchWatcherApp:
         for s in self.cfg["streamers"]:
             if s["name"].lower() == name:
                 s["drops_only"] = not s.get("drops_only", False)
+        save_config(self.cfg)
+        self._populate_streamers()
+
+    def _toggle_auto_open(self):
+        sel = self.streamer_tree.selection()
+        if not sel:
+            return
+        name = str(self.streamer_tree.item(sel[0])["values"][0]).lower()
+        for s in self.cfg["streamers"]:
+            if s["name"].lower() == name:
+                s["auto_open"] = not s.get("auto_open", True)
         save_config(self.cfg)
         self._populate_streamers()
 
@@ -618,6 +641,7 @@ class TwitchWatcherApp:
     def _do_poll(self, client_id):
         usernames       = [s["name"].lower() for s in self.cfg.get("streamers", [])]
         drops_only_set  = {s["name"].lower() for s in self.cfg.get("streamers", []) if s.get("drops_only")}
+        no_auto_open    = {s["name"].lower() for s in self.cfg.get("streamers", []) if not s.get("auto_open", True)}
         drops_games_low = {g.lower() for g in self.cfg.get("drops_watch_games", [])}
 
         try:
@@ -656,9 +680,12 @@ class TwitchWatcherApp:
                 notify(f"{name} is live (no drops yet)", info["title"])
                 self.drops_pending.add(name)
                 continue
-            self._log(f"[{ts}] {name} LIVE — opening browser. ({info['title']})")
             notify(f"{name} is LIVE 🔴", info["title"])
-            webbrowser.open(f"https://twitch.tv/{name}")
+            if name in no_auto_open:
+                self._log(f"[{ts}] {name} LIVE — notify only (auto-open off). ({info['title']})")
+            else:
+                self._log(f"[{ts}] {name} LIVE — opening browser. ({info['title']})")
+                webbrowser.open(f"https://twitch.tv/{name}")
             self.opened.add(name)
 
         # Check drops_pending streamers — did they add drops to their title?
@@ -667,9 +694,12 @@ class TwitchWatcherApp:
                 continue  # went offline, handled below
             info = live_streams[name]
             if "drops" in info["title"].lower():
-                self._log(f"[{ts}] {name} added drops! Opening browser. ({info['title']})")
                 notify(f"{name} now has DROPS 🎁", info["title"])
-                webbrowser.open(f"https://twitch.tv/{name}")
+                if name in no_auto_open:
+                    self._log(f"[{ts}] {name} added drops — notify only (auto-open off). ({info['title']})")
+                else:
+                    self._log(f"[{ts}] {name} added drops! Opening browser. ({info['title']})")
+                    webbrowser.open(f"https://twitch.tv/{name}")
                 self.drops_pending.discard(name)
                 self.opened.add(name)
 
