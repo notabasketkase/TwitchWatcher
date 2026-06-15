@@ -29,19 +29,55 @@ Effort key: 🟢 quick · 🟡 medium · 🔴 big lift · 🔒 needs Twitch logi
 
 ---
 
+## 🏁 Path to 1.0
+
+**1.0 = confidence, not perfection.** It means "I'd hand this to a stranger with no caveats and not
+wince" — NOT "every roadmap item is done" (the backlog never empties; that's what 1.x / 2.0 are for).
+Cut 1.0 when most of these are true:
+
+- [x] Core loop (detect live → notify → auto-open) is reliable
+- [ ] Runs **unattended** (system tray) — completes the "leave it running while away" promise
+- [x] Per-streamer control (auto-open toggle — done in v0.3.0)
+- [ ] A stranger can set it up **solo** (guide does the job; screenshots help close this)
+- [x] No known crashes / lost settings in normal use
+- [ ] It can **tell users about updates** (update-check)
+- [ ] I'd honestly call it "done & solid," not "early / beta"
+
+**Realistic route:** v0.3.0 knocks out tray + toggle + update-check (the core-completeness items) →
+let it run in real users' hands for a couple of weeks → if it holds up with no major bugs and the
+guide gets someone set up solo, **that's your 1.0.** Dark mode / reorder / multi-select are *polish →
+v1.1+*, not 1.0 blockers. You can always ship 1.0.1 the next day — shipped-and-good beats
+unshipped-and-perfect.
+
+---
+
 ## 🎯 v0.3.0 — Candidates (next up)
 
 **🔨 Committed this cycle (~1.5–2 weeks; alpha-tested on my own machine before sharing):**
 1. ✅ **Per-streamer auto-open toggle** — DONE (built + in the exe, 2026-06-14). Per-streamer
    `auto_open` flag (default on), Auto-Open column + checkbox + Toggle button, watcher notifies
    but skips the browser when off.
-2. ⭐ **Minimize to system tray** (priority climb — done while fresh) ← NEXT
-3. **"Create Desktop Shortcut" button** (quick recovery win)
-4. **Dark / Light (+ System) mode** (do LAST — most likely to balloon; see note below)
+2. ✅ **Minimize to system tray** — DONE (confirmed in the exe, 2026-06-15). Tray icon + Show/Quit
+   menu; the ✕ hides to tray (with a notification); plus a window **File → Quit / Hide to Tray** menu.
+3. ✅ **Launch on Windows startup (run on login)** — DONE (in the exe, 2026-06-15). Settings toggle
+   adds/removes an HKCU Run-key entry (no admin needed). With tray = the "unattended trifecta" done.
+4. **"Create Desktop Shortcut" button** (quick win)
+5. **Update check (check-and-notify)** (🟡 moderate — needs an `APP_VERSION` constant first; see the
+   detailed bullet + the "forward-looking" caveat below)
+6. **Dark / Light (+ System) mode** (do LAST — the flex; if the date's tight, cut THIS first)
 
 Theme: *comfortable to leave running unattended, friendly to live with, easy on the eyes.*
-Order protects the must-haves: if the week runs short, the first three are already shipped and
-dark mode rolls to v0.3.1. Scope is 4 now, so treat it as ~1.5–2 weeks, not one.
+Order protects the must-haves: if the week runs short, the earlier ones are already shipped and
+dark mode rolls to v0.3.1. Scope is 6 now (one ✅ done; tray = the big climb; run-on-startup small;
+shortcut quick; update-check moderate; dark mode = flex).
+**🎯 Target release: ~2026-06-20/21 (next weekend).** To hit it, protect the *date, not the scope*:
+ship toggle ✅ + tray + run-on-startup + shortcut on the 20th (+ update-check if tray lands smoothly). **Dark mode is
+the flex item** — if it's not solid by then, it rolls to v0.3.1 a week later (totally normal). A dated
+release with 3–4 solid features beats an open-ended one stalled on dark mode. Tray is the long pole —
+start there.
+**Update-check caveat:** it only notifies people who already *have* the version containing it. So
+v0.3.0's checker starts the auto-notify chain from v0.3.0 onward; telling current v0.2.0 users about
+v0.3.0 itself is still a manual announce.
 
 - ⭐ **Minimize to system tray — PRIORITY for the next v0.3.0 session.** Run quietly in the
   background, no taskbar clutter, with a tray right-click menu (Show / Quit). The most
@@ -65,6 +101,11 @@ dark mode rolls to v0.3.1. Scope is 4 now, so treat it as ~1.5–2 weeks, not on
 - 🟡 **Collapsible groups** — click a group header to fold/unfold it on Live Status (state remembered)
 - 🟡 **Reorder groups** — arrange groups into the order you want (persisted)
 - 🟡 **Reorder streamers** within a group
+- 🟡 **Sort Live Status: online above offline** — float live streamers to the top so you see who's
+  on at a glance. Requested by Aerwidh. Design Q: sort *within each group* (keep groups, live-first
+  inside) vs a flat live-first list (drops grouping). Build note: rows are built once then updated
+  in place today, so this needs re-sorting the row *order* when a status changes, not just updating
+  labels — a bit more than a one-liner. User's stance: may not make the next update.
 - 🟢 **Per-streamer auto-open toggle** — choose who auto-opens vs. who is notify-only (some
   streamers you want launched, others just a heads-up). Requested by wyntrblue. Easy: add a
   per-streamer flag (default ON, so today's behavior is unchanged) + a column/toggle in the
@@ -126,7 +167,18 @@ dark mode rolls to v0.3.1. Scope is 4 now, so treat it as ~1.5–2 weeks, not on
   streamer live and nudges you to tune in. (Approximate — based on the app opening them,
   not Twitch's official number. See "Can't Do Yet" below.)
 - 🟡 **Category browsing** — see who's live in a given game right now (Helix supports this)
-- 🟢 **Windows startup entry** — launch on Windows login (separate from "autostart watching")
+- 🟡 **UI refresh — consider moving Settings into a menu** (e.g. File → Settings / a Preferences
+  dialog) now that there's a menu bar. *Polish, not a feature* — reorganizes existing UI. Tradeoff:
+  more conventional + frees tab space, BUT a visible Settings *tab* is arguably more discoverable for
+  non-technical users (a core value). Best done as a deliberate UI pass bundled with the dark-mode /
+  theming work (v0.4.0-ish), not mid-cycle. Idea sparked by adding the File menu.
+- 🟢🔨 **Launch on Windows startup (run on login)** — register/unregister the app to start when
+  Windows boots, via a Settings toggle (adds/removes a registry Run key or a Startup-folder
+  shortcut). Requested by Aerwidh; **actively being worked on.** Distinct from the existing in-app
+  "autostart watching" (that starts the *watcher* when the app opens; this launches the *app itself*
+  on login). Completes the **unattended trifecta**: tray (background) + run-on-startup (survives
+  reboots) + autostart-watching (auto-begins) = "leave a machine running to keep my streak." Pairs
+  with the tray work — ⬆ **now committed to v0.3.0** (#3, build it with tray).
 - 🔴 **Mac / Linux support** — the stack is ~90% portable (Python, Tkinter, requests, keyring
   are all cross-platform). What needs doing:
   - Replace Windows-only `os.startfile()` (PDF open) with `open` (Mac) / `xdg-open` (Linux)

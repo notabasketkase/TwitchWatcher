@@ -37,3 +37,9 @@ The finished `TwitchWatcher.exe` lands in the `dist/` folder. Share only that
 
 TwitchWatcher only talks to Twitch's official API (`id.twitch.tv` and
 `api.twitch.tv`). No data is collected and nothing is sent to any third party.
+
+## Support
+
+TwitchWatcher is free and always will be. If it's saved your streaks and you feel
+like tossing a coffee in the tip jar, it's appreciated (but never expected) ☕ —
+[ko-fi.com/notabasketkase](https://ko-fi.com/notabasketkase)

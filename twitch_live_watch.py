@@ -38,6 +38,19 @@ try:
 except ImportError:
     PLYER_AVAILABLE = False
 
+try:
+    import pystray
+    from PIL import Image
+    PYSTRAY_AVAILABLE = True
+except ImportError:
+    PYSTRAY_AVAILABLE = False
+
+try:
+    import winreg
+    WINREG_AVAILABLE = True
+except ImportError:
+    WINREG_AVAILABLE = False
+
 KEYRING_SERVICE  = "TwitchWatcher"
 KEYRING_USERNAME = "client_secret"
 DEFAULT_GROUP    = "General"
@@ -61,6 +74,43 @@ def delete_secret():
             keyring.delete_password(KEYRING_SERVICE, KEYRING_USERNAME)
         except Exception:
             pass
+
+
+# =============================================================================
+# STARTUP (RUN ON WINDOWS LOGIN)
+# =============================================================================
+RUN_KEY_PATH = r"Software\Microsoft\Windows\CurrentVersion\Run"
+RUN_KEY_NAME = "TwitchWatcher"
+
+def _startup_command():
+    """The command Windows runs on login (quoted for paths with spaces)."""
+    if getattr(sys, "frozen", False):
+        return f'"{sys.executable}"'
+    return f'"{sys.executable}" "{os.path.abspath(__file__)}"'
+
+def is_run_on_startup():
+    """True if the app is registered to launch on Windows login."""
+    if not WINREG_AVAILABLE:
+        return False
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY_PATH, 0, winreg.KEY_READ) as key:
+            winreg.QueryValueEx(key, RUN_KEY_NAME)
+        return True
+    except OSError:
+        return False
+
+def set_run_on_startup(enabled):
+    """Add or remove the Windows login startup entry (HKCU Run key, no admin needed)."""
+    if not WINREG_AVAILABLE:
+        return
+    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY_PATH, 0, winreg.KEY_SET_VALUE) as key:
+        if enabled:
+            winreg.SetValueEx(key, RUN_KEY_NAME, 0, winreg.REG_SZ, _startup_command())
+        else:
+            try:
+                winreg.DeleteValue(key, RUN_KEY_NAME)
+            except FileNotFoundError:
+                pass
 
 
 # =============================================================================
@@ -177,11 +227,18 @@ class TwitchWatcherApp:
         self.drops_game_alerted  = set()
         self.watching            = False
         self.status_rows         = {}   # name -> dict of label widgets
+        self.tray_icon           = None
+        self._tray_hint_shown    = False
 
         self._build_ui()
         self._populate_settings()
         self._populate_streamers()
         self._populate_games()
+
+        # System tray — lets the app run in the background; closing the window hides to tray
+        self._setup_tray()
+        if PYSTRAY_AVAILABLE and self.tray_icon is not None:
+            self.root.protocol("WM_DELETE_WINDOW", self._hide_to_tray)
 
         # First run check — show welcome dialog if no credentials saved yet
         self.root.after(200, self._check_first_run)
@@ -194,6 +251,16 @@ class TwitchWatcherApp:
     # UI
     # =========================================================================
     def _build_ui(self):
+        # Menu bar — a clear, discoverable way to quit, since the ✕ now hides to tray
+        menubar = tk.Menu(self.root)
+        file_menu = tk.Menu(menubar, tearoff=0)
+        if PYSTRAY_AVAILABLE:
+            file_menu.add_command(label="Hide to Tray", command=self._hide_to_tray)
+            file_menu.add_separator()
+        file_menu.add_command(label="Quit", command=self._quit_app)
+        menubar.add_cascade(label="File", menu=file_menu)
+        self.root.config(menu=menubar)
+
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
 
@@ -552,6 +619,9 @@ class TwitchWatcherApp:
         self.autostart_var = tk.BooleanVar()
         ttk.Checkbutton(f2, text="Start watching automatically when app opens",
                         variable=self.autostart_var).grid(row=1, column=0, columnspan=2, sticky="w", padx=6, pady=4)
+        self.run_on_startup_var = tk.BooleanVar()
+        ttk.Checkbutton(f2, text="Launch TwitchWatcher when Windows starts",
+                        variable=self.run_on_startup_var).grid(row=2, column=0, columnspan=2, sticky="w", padx=6, pady=4)
 
         btn_row = ttk.Frame(self.tab_settings)
         btn_row.pack(fill=tk.X, padx=12, pady=10)
@@ -568,6 +638,7 @@ class TwitchWatcherApp:
         self.csec_var.set(load_secret())
         self.interval_var.set(self.cfg.get("poll_interval", 300))
         self.autostart_var.set(self.cfg.get("autostart", False))
+        self.run_on_startup_var.set(is_run_on_startup())
 
     def _save_settings(self):
         self.cfg["client_id"]    = self.cid_var.get().strip()
@@ -578,6 +649,11 @@ class TwitchWatcherApp:
         if secret and not all(c == "*" for c in secret):
             store_secret(secret)
             self.csec_var.set("*" * len(secret))
+        try:
+            set_run_on_startup(self.run_on_startup_var.get())
+        except Exception as e:
+            messagebox.showwarning("Startup setting",
+                                   f"Couldn't update the Windows startup entry:\n{e}")
         messagebox.showinfo("Saved",
             "Settings saved.\n\nClient ID → config file\nClient Secret → Windows Credential Manager")
 
@@ -731,6 +807,62 @@ class TwitchWatcherApp:
         self.root.after(0, _do)
 
 
+
+    # =========================================================================
+    # SYSTEM TRAY
+    # =========================================================================
+    def _resource_path(self, name):
+        """Path to a bundled resource, working both as a script and a frozen exe."""
+        base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+        return os.path.join(base, name)
+
+    def _setup_tray(self):
+        """Create a system-tray icon so the app can keep running in the background."""
+        if not PYSTRAY_AVAILABLE:
+            return
+        try:
+            icon_path = self._resource_path("icon.ico")
+            if os.path.exists(icon_path):
+                image = Image.open(icon_path)
+            else:
+                image = Image.new("RGB", (64, 64), (119, 44, 232))  # Twitch purple fallback
+            menu = pystray.Menu(
+                pystray.MenuItem("Show Twitch Watcher", self._show_window, default=True),
+                pystray.MenuItem("Quit", self._quit_app),
+            )
+            self.tray_icon = pystray.Icon("TwitchWatcher", image, "Twitch Watcher", menu)
+            threading.Thread(target=self.tray_icon.run, daemon=True).start()
+        except Exception:
+            # If the tray can't start, fall back to normal window behavior
+            self.tray_icon = None
+
+    def _hide_to_tray(self):
+        """Hide the window to the tray instead of quitting (window close button)."""
+        self.root.withdraw()
+        if not self._tray_hint_shown:
+            notify("TwitchWatcher is still running",
+                   "Minimized to the system tray (check the ^ arrow by the clock). "
+                   "Right-click the icon to open or quit.")
+            self._tray_hint_shown = True
+
+    def _show_window(self, icon=None, item=None):
+        """Restore the window from the tray. Runs on the tray thread → marshal to Tk."""
+        self.root.after(0, self._do_show_window)
+
+    def _do_show_window(self):
+        self.root.deiconify()
+        self.root.lift()
+        self.root.focus_force()
+
+    def _quit_app(self, icon=None, item=None):
+        """Fully exit: stop watching, stop the tray icon, close the app."""
+        self.watching = False
+        if self.tray_icon is not None:
+            try:
+                self.tray_icon.stop()
+            except Exception:
+                pass
+        self.root.after(0, self.root.destroy)
 
     # =========================================================================
     # FIRST RUN

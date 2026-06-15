@@ -19,6 +19,7 @@ python -m PyInstaller --noconfirm --clean --onefile --windowed ^
   --add-data "icon.ico;." ^
   --hidden-import plyer.platforms.win.notification ^
   --hidden-import keyring.backends.Windows ^
+  --hidden-import pystray._win32 ^
   "twitch_live_watch.py"
 
 echo.
