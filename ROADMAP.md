@@ -132,7 +132,9 @@ v0.3.0 itself is still a manual announce.
   on Live Status. Easy: the Helix Get Streams response already includes `started_at` (the app
   fetches it today but ignores it) — just parse it and show elapsed time, refreshed each poll. No
   new API calls or login. The happy opposite of the watch-streak number: Twitch hands this out freely.
-- 🟢 **Dates on log timestamps** — the log shows time only (`20:17:58`); add the date so multi-day
+- ✅ **Dates on log timestamps** — DONE in v0.3.0: drops a "——— Jun 15, 2026 ———" divider in the log
+  when the day rolls over (spelled-out month, no US/EU ambiguity). Completes the set-and-forget
+  experience. Originally: the log showed time only (`20:17:58`); add the date so multi-day
   runs are readable. Matters specifically once the app lives in the tray running for days. Trivial:
   widen the `strftime` format. Nicer option: a "— Jun 13, 2026 —" divider line when the day rolls
   over, rather than repeating the date on every line.

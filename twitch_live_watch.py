@@ -298,6 +298,7 @@ class TwitchWatcherApp:
         self.status_rows         = {}   # name -> dict of label widgets
         self.tray_icon           = None
         self._tray_hint_shown    = False
+        self._last_log_date      = ""
 
         self._build_ui()
         self._populate_settings()
@@ -915,6 +916,12 @@ class TwitchWatcherApp:
     def _log(self, msg):
         def _do():
             self.log_box.config(state=tk.NORMAL)
+            # Drop a date divider when the day rolls over, so multi-day (set-and-forget) logs
+            # stay readable. Spelled-out month avoids US/EU numeric-date ambiguity.
+            today = time.strftime("%b %d, %Y")
+            if today != self._last_log_date:
+                self._last_log_date = today
+                self.log_box.insert(tk.END, f"——— {today} ———\n")
             self.log_box.insert(tk.END, msg + "\n")
             self.log_box.see(tk.END)
             self.log_box.config(state=tk.DISABLED)
