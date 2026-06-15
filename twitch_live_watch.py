@@ -54,6 +54,8 @@ except ImportError:
 KEYRING_SERVICE  = "TwitchWatcher"
 KEYRING_USERNAME = "client_secret"
 DEFAULT_GROUP    = "General"
+APP_VERSION      = "0.3.0"
+GITHUB_REPO      = "notabasketkase/TwitchWatcher"
 
 
 # =============================================================================
@@ -111,6 +113,73 @@ def set_run_on_startup(enabled):
                 winreg.DeleteValue(key, RUN_KEY_NAME)
             except FileNotFoundError:
                 pass
+
+
+# =============================================================================
+# DESKTOP SHORTCUT
+# =============================================================================
+def create_desktop_shortcut():
+    """Create a TwitchWatcher shortcut on the user's Desktop (Windows, via WScript.Shell)."""
+    import subprocess
+    if getattr(sys, "frozen", False):
+        target    = sys.executable
+        arguments = ""
+        workdir   = os.path.dirname(sys.executable)
+        icon      = sys.executable  # the exe carries the embedded icon
+    else:
+        target    = sys.executable  # python / pythonw
+        arguments = f'"{os.path.abspath(__file__)}"'
+        workdir   = os.path.dirname(os.path.abspath(__file__))
+        ico       = os.path.join(workdir, "icon.ico")
+        icon      = ico if os.path.exists(ico) else target
+
+    def q(s):  # quote a value as a PowerShell single-quoted literal
+        return "'" + str(s).replace("'", "''") + "'"
+
+    ps = (
+        "$ws = New-Object -ComObject WScript.Shell; "
+        "$d = [Environment]::GetFolderPath('Desktop'); "
+        "$s = $ws.CreateShortcut((Join-Path $d 'TwitchWatcher.lnk')); "
+        f"$s.TargetPath = {q(target)}; "
+        f"$s.Arguments = {q(arguments)}; "
+        f"$s.WorkingDirectory = {q(workdir)}; "
+        f"$s.IconLocation = {q(icon)}; "
+        "$s.Description = 'TwitchWatcher'; "
+        "$s.Save()"
+    )
+    subprocess.run(
+        ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps],
+        check=True, capture_output=True,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+
+
+# =============================================================================
+# UPDATE CHECK
+# =============================================================================
+def _parse_version(s):
+    """Turn 'v0.3.0' / '0.3.1' into a comparable tuple like (0, 3, 0)."""
+    s = (s or "").lstrip("vV").strip()
+    parts = []
+    for chunk in s.split("."):
+        digits = "".join(c for c in chunk if c.isdigit())
+        parts.append(int(digits) if digits else 0)
+    return tuple(parts) if parts else (0,)
+
+def get_latest_release():
+    """Return (tag_name, html_url) for the latest GitHub release. Raises on failure."""
+    resp = requests.get(
+        f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest",
+        headers={"Accept": "application/vnd.github+json", "User-Agent": "TwitchWatcher"},
+        timeout=10,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    return data.get("tag_name", ""), data.get("html_url", "")
+
+def is_newer_version(latest_tag):
+    """True if latest_tag is newer than this app's APP_VERSION."""
+    return _parse_version(latest_tag) > _parse_version(APP_VERSION)
 
 
 # =============================================================================
@@ -207,7 +276,7 @@ def notify(title, message):
 class TwitchWatcherApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Twitch Watcher")
+        self.root.title(f"Twitch Watcher v{APP_VERSION}")
         self.root.geometry("700x580")
 
         # Set the window/taskbar icon (falls back silently if not found).
@@ -242,6 +311,9 @@ class TwitchWatcherApp:
 
         # First run check — show welcome dialog if no credentials saved yet
         self.root.after(200, self._check_first_run)
+
+        # Quietly check for a newer release in the background (silent if offline/up-to-date)
+        self.root.after(1500, self._check_updates_on_launch)
 
         # Autostart — kick off the watcher after the UI is fully ready
         if self.cfg.get("autostart"):
@@ -627,6 +699,8 @@ class TwitchWatcherApp:
         btn_row.pack(fill=tk.X, padx=12, pady=10)
         ttk.Button(btn_row, text="Save Settings",     command=self._save_settings).pack(side=tk.LEFT)
         ttk.Button(btn_row, text="Clear Saved Secret", command=self._clear_secret).pack(side=tk.LEFT, padx=8)
+        ttk.Button(btn_row, text="Create Desktop Shortcut", command=self._create_shortcut).pack(side=tk.LEFT, padx=8)
+        ttk.Button(btn_row, text="Check for Updates", command=self._check_updates_clicked).pack(side=tk.LEFT, padx=8)
 
         if not PLYER_AVAILABLE:
             ttk.Label(self.tab_settings,
@@ -663,6 +737,46 @@ class TwitchWatcherApp:
             delete_secret()
             self.csec_var.set("")
             messagebox.showinfo("Cleared", "Client Secret removed from Windows Credential Manager.")
+
+    def _create_shortcut(self):
+        try:
+            create_desktop_shortcut()
+            messagebox.showinfo("Shortcut created",
+                                "A TwitchWatcher shortcut was added to your Desktop.")
+        except Exception as e:
+            messagebox.showwarning("Couldn't create shortcut",
+                                   f"Something went wrong:\n{e}")
+
+    def _check_updates_on_launch(self):
+        """Background check; only bothers the user if a newer release exists."""
+        def work():
+            try:
+                tag, url = get_latest_release()
+                if tag and is_newer_version(tag):
+                    self.root.after(0, self._prompt_update, tag, url)
+            except Exception:
+                pass  # stay silent on launch (offline, rate-limited, etc.)
+        threading.Thread(target=work, daemon=True).start()
+
+    def _check_updates_clicked(self):
+        """Manual 'Check for Updates' button — reports every outcome."""
+        try:
+            tag, url = get_latest_release()
+        except Exception as e:
+            messagebox.showwarning("Update check failed",
+                                   f"Couldn't reach GitHub to check for updates.\n{e}")
+            return
+        if tag and is_newer_version(tag):
+            self._prompt_update(tag, url)
+        else:
+            messagebox.showinfo("Up to date",
+                                f"You're running the latest version (v{APP_VERSION}).")
+
+    def _prompt_update(self, tag, url):
+        if messagebox.askyesno("Update available",
+                f"A new version ({tag}) of TwitchWatcher is available.\n"
+                f"You're on v{APP_VERSION}.\n\nOpen the download page?"):
+            webbrowser.open(url or f"https://github.com/{GITHUB_REPO}/releases/latest")
 
     # =========================================================================
     # WATCHER

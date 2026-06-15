@@ -36,18 +36,38 @@ wince" — NOT "every roadmap item is done" (the backlog never empties; that's w
 Cut 1.0 when most of these are true:
 
 - [x] Core loop (detect live → notify → auto-open) is reliable
-- [ ] Runs **unattended** (system tray) — completes the "leave it running while away" promise
+- [x] Runs **unattended** (system tray) — done in v0.3.0
 - [x] Per-streamer control (auto-open toggle — done in v0.3.0)
 - [ ] A stranger can set it up **solo** (guide does the job; screenshots help close this)
 - [x] No known crashes / lost settings in normal use
-- [ ] It can **tell users about updates** (update-check)
+- [x] It can **tell users about updates** (update-check — done in v0.3.0)
+- [ ] It *looks* the part — a **UI rehaul** is the chosen bar for 1.0
 - [ ] I'd honestly call it "done & solid," not "early / beta"
 
-**Realistic route:** v0.3.0 knocks out tray + toggle + update-check (the core-completeness items) →
-let it run in real users' hands for a couple of weeks → if it holds up with no major bugs and the
-guide gets someone set up solo, **that's your 1.0.** Dark mode / reorder / multi-select are *polish →
-v1.1+*, not 1.0 blockers. You can always ship 1.0.1 the next day — shipped-and-good beats
-unshipped-and-perfect.
+**Realistic route:** v0.3.0 makes it *functionally* 1.0-ready — the unattended core + per-streamer
+control + update-check are all done. The chosen gate to actually stamping **1.0 is the UI rehaul**:
+make it look polished, then declare it. So: ship v0.3.0 (6/20) → let it run in real users' hands →
+do the **v1.0 UI rehaul** (below) → declare 1.0 once it's polished and proven. (You can always ship
+1.0.1 the next day; shipped-and-good beats unshipped-and-perfect.)
+
+---
+
+## 🎨 v1.0 — UI Rehaul (planned)
+
+The chosen gate to 1.0: make it *look* like real software, not just work like it. Bundle the
+theming + layout work into **one deliberate redesign** (don't dribble it out piecemeal):
+
+- **Dark / Light / System theming** — moved here from v0.3.0. `sv_ttk` gives an easy modern base; the
+  real work is making the hardcoded colors theme-aware (see the dark-mode color audit lower down).
+  Possible "Auto by time" mode could reuse the **SunShift** day/night logic. Apply at startup; avoid
+  sudden bright flips.
+- **Modern toolkit / look** — `sv_ttk` (drop-in modern ttk theme) or CustomTkinter (bigger lift).
+- **Settings reorganization** — consider Settings → a menu / Preferences dialog (weigh against
+  discoverability for non-tech users; see the backlog note).
+- **Layout polish** — spacing, grouping; maybe live-sort (online-above-offline) + collapsible groups.
+
+Keep it deliberate — this is what makes you confident to stamp "1.0," so give it room rather than
+rushing. Ship v0.3.0 first; start the rehaul after it's had some real-world use.
 
 ---
 
@@ -61,20 +81,18 @@ unshipped-and-perfect.
    menu; the ✕ hides to tray (with a notification); plus a window **File → Quit / Hide to Tray** menu.
 3. ✅ **Launch on Windows startup (run on login)** — DONE (in the exe, 2026-06-15). Settings toggle
    adds/removes an HKCU Run-key entry (no admin needed). With tray = the "unattended trifecta" done.
-4. **"Create Desktop Shortcut" button** (quick win)
-5. **Update check (check-and-notify)** (🟡 moderate — needs an `APP_VERSION` constant first; see the
-   detailed bullet + the "forward-looking" caveat below)
-6. **Dark / Light (+ System) mode** (do LAST — the flex; if the date's tight, cut THIS first)
+4. ✅ **"Create Desktop Shortcut" button** — DONE (in the exe, 2026-06-15). Settings button creates a
+   Desktop `.lnk` to the app via WScript.Shell.
+5. ✅ **Update check (check-and-notify)** — DONE (in the exe, 2026-06-15). `APP_VERSION` constant +
+   version in the title bar; checks GitHub Releases on launch (silent) and via a Settings button.
+**✅ All 5 committed features are DONE — v0.3.0 is feature-complete and ready to ship (target ~6/20–21).**
+Theme: *comfortable to leave running unattended, friendly to live with.* **Dark mode was pulled out**
+and moved to the **v1.0 UI rehaul** (above) — it's a theming job that belongs with the redesign, not a
+rushed flex. Pulling it keeps the 6/20 release clean: ship the 5 solid features, no loose ends.
 
-Theme: *comfortable to leave running unattended, friendly to live with, easy on the eyes.*
-Order protects the must-haves: if the week runs short, the earlier ones are already shipped and
-dark mode rolls to v0.3.1. Scope is 6 now (one ✅ done; tray = the big climb; run-on-startup small;
-shortcut quick; update-check moderate; dark mode = flex).
-**🎯 Target release: ~2026-06-20/21 (next weekend).** To hit it, protect the *date, not the scope*:
-ship toggle ✅ + tray + run-on-startup + shortcut on the 20th (+ update-check if tray lands smoothly). **Dark mode is
-the flex item** — if it's not solid by then, it rolls to v0.3.1 a week later (totally normal). A dated
-release with 3–4 solid features beats an open-ended one stalled on dark mode. Tray is the long pole —
-start there.
+Remaining to ship v0.3.0: rebuild (done — current exe has all 5) → alpha-test the bundle → push + cut
+the GitHub release with notes (~6/20).
+
 **Update-check caveat:** it only notifies people who already *have* the version containing it. So
 v0.3.0's checker starts the auto-notify chain from v0.3.0 onward; telling current v0.2.0 users about
 v0.3.0 itself is still a manual announce.
@@ -85,7 +103,7 @@ v0.3.0 itself is still a manual announce.
   *Build note:* use `pystray` (+ Pillow, already installed) running alongside the Tk loop; make
   the window's "X" minimize to tray instead of quitting (keep a real Quit in the tray menu).
   Bonus: `pystray` is cross-platform, so it carries over to the Mac/Linux goal.
-- 🟡 **Dark / Light (+ System) mode** — ⬆ *committed this cycle (#4).* Base light/dark via
+- 🟡 **Dark / Light (+ System) mode** — ⬆ *moved to the v1.0 UI rehaul (above).* Base light/dark via
   `sv_ttk` is easy; the real work is recoloring the hardcoded bits to be theme-aware. **Color audit:**
   the *grays* are the problem — offline status, the `#666666` group headers, and the gray
   note/placeholder labels all wash out on dark. Make them theme-aware — DON'T hardcode white (it'd be
