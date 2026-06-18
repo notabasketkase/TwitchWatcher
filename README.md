@@ -20,19 +20,6 @@ You'll need a free Twitch API Client ID and Client Secret. See the included
 **TwitchWatcher_Setup_Guide.pdf** for step-by-step instructions — it takes about
 five minutes and you only do it once.
 
-## Running from source
-
-```
-pip install requests plyer keyring
-python twitch_live_watch.py
-```
-
-## Building the standalone .exe
-
-Install PyInstaller (`pip install pyinstaller`), then double-click **build.bat**.
-The finished `TwitchWatcher.exe` lands in the `dist/` folder. Share only that
-`.exe` — never your `twitch_watcher_config.json`.
-
 ## Privacy
 
 TwitchWatcher only talks to Twitch's official API (`id.twitch.tv` and
