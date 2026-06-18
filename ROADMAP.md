@@ -65,6 +65,10 @@ theming + layout work into **one deliberate redesign** (don't dribble it out pie
 - **Settings reorganization** — consider Settings → a menu / Preferences dialog (weigh against
   discoverability for non-tech users; see the backlog note).
 - **Layout polish** — spacing, grouping; maybe live-sort (online-above-offline) + collapsible groups.
+- **Restyle the log** — it's a raw monospace `Text` box today. In the rehaul: theme-aware colors,
+  **color-coded entries** via Text tags (green = went live/opened · gray = offline · gold = drops 🎁
+  · red/orange = errors), styled date dividers, muted timestamps. Biggest visual upgrade for the
+  least logic — it's the most "terminal-looking" part right now. (Requested as part of the rehaul.)
 
 Keep it deliberate — this is what makes you confident to stamp "1.0," so give it room rather than
 rushing. Ship v0.3.0 first; start the rehaul after it's had some real-world use.
@@ -96,6 +100,18 @@ the GitHub release with notes (~6/20).
 **Update-check caveat:** it only notifies people who already *have* the version containing it. So
 v0.3.0's checker starts the auto-notify chain from v0.3.0 onward; telling current v0.2.0 users about
 v0.3.0 itself is still a manual announce.
+
+---
+
+## 🩹 v0.3.1 — quick wins (post-release feedback) — ✅ BUILT 2026-06-18
+Small, high-value fixes from real users after v0.3.0:
+- ✅ **In-app "Setup Guide" button** — opens the bundled PDF anytime from Settings (Credentials box),
+  not just the first-run dialog. Fixes wyntrblue's "couldn't find the instructions when I re-set-up."
+- ✅ **Clickable guide link in the README** — the PDF is now a real link from the GitHub page.
+- ✅ **Sort the Streamers list by column** — click a header to sort, click again to reverse.
+
+Remaining: rebuild → push → cut the v0.3.1 release. (Live-Status "online-above-offline" sort stays
+deferred to the v1 rehaul.)
 
 - ⭐ **Minimize to system tray — PRIORITY for the next v0.3.0 session.** Run quietly in the
   background, no taskbar clutter, with a tray right-click menu (Show / Quit). The most
@@ -187,6 +203,12 @@ v0.3.0 itself is still a manual announce.
   streamer live and nudges you to tune in. (Approximate — based on the app opening them,
   not Twitch's official number. See "Can't Do Yet" below.)
 - 🟡 **Category browsing** — see who's live in a given game right now (Helix supports this)
+- 🚫 **Mobile app — out of scope (not a port).** Testers ask occasionally. Phones can't run the
+  Tkinter/exe, mobile OSes block the background-polling + auto-open the app relies on, and the
+  "keep my streak alive 24/7" purpose needs an always-on machine (a phone isn't one). A *real* mobile
+  version = a separate server-based push-notification app: big new build, notify-only (can't keep
+  streaks), and overlaps with Twitch's own live notifications. For "check it from my phone," Remote
+  Control already covers that. Recommendation: don't pursue.
 - 🟡 **UI refresh — consider moving Settings into a menu** (e.g. File → Settings / a Preferences
   dialog) now that there's a menu bar. *Polish, not a feature* — reorganizes existing UI. Tradeoff:
   more conventional + frees tab space, BUT a visible Settings *tab* is arguably more discoverable for

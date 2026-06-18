@@ -17,7 +17,7 @@ open their channel in your browser.
 ## Setup
 
 You'll need a free Twitch API Client ID and Client Secret. See the included
-**TwitchWatcher_Setup_Guide.pdf** for step-by-step instructions — it takes about
+[**TwitchWatcher_Setup_Guide.pdf**](TwitchWatcher_Setup_Guide.pdf) for step-by-step instructions — it takes about
 five minutes and you only do it once.
 
 ## Privacy

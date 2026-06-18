@@ -54,7 +54,7 @@ except ImportError:
 KEYRING_SERVICE  = "TwitchWatcher"
 KEYRING_USERNAME = "client_secret"
 DEFAULT_GROUP    = "General"
-APP_VERSION      = "0.3.0"
+APP_VERSION      = "0.3.1"
 GITHUB_REPO      = "notabasketkase/TwitchWatcher"
 
 
@@ -499,6 +499,9 @@ class TwitchWatcherApp:
         self.streamer_tree.column("group",      width=150)
         self.streamer_tree.column("drops_only", width=90, anchor="center")
         self.streamer_tree.column("auto_open",  width=90, anchor="center")
+        # Click a column header to sort the list by that column
+        for _c in cols:
+            self.streamer_tree.heading(_c, command=lambda c=_c: self._sort_streamer_column(c, False))
         self.streamer_tree.pack(fill=tk.BOTH, expand=True, padx=8, pady=4)
 
         bot = ttk.Frame(self.tab_stream)
@@ -517,6 +520,16 @@ class TwitchWatcherApp:
                 "Yes" if s.get("drops_only") else "No",
                 "Yes" if s.get("auto_open", True) else "No"
             ))
+
+    def _sort_streamer_column(self, col, descending):
+        """Click a Streamers column header to sort the view by that column (toggles asc/desc)."""
+        rows = [(self.streamer_tree.set(item, col), item)
+                for item in self.streamer_tree.get_children("")]
+        rows.sort(key=lambda r: str(r[0]).lower(), reverse=descending)
+        for index, (_val, item) in enumerate(rows):
+            self.streamer_tree.move(item, "", index)
+        # flip direction for the next click on this header
+        self.streamer_tree.heading(col, command=lambda: self._sort_streamer_column(col, not descending))
 
     def _add_streamer(self):
         name  = self.new_streamer_var.get().strip().lower()
@@ -682,6 +695,8 @@ class TwitchWatcherApp:
         config_note = f"ℹ  Streamer list, game list, and poll interval are saved to:\n{CONFIG_FILE}"
         ttk.Label(f, text=config_note, wraplength=500, foreground="gray",
                   font=("", 8)).grid(row=3, column=0, columnspan=2, padx=6, pady=(0, 8), sticky="w")
+        ttk.Button(f, text="📄  Open Setup Guide", command=self._open_setup_guide).grid(
+            row=4, column=0, columnspan=2, padx=6, pady=(0, 8), sticky="w")
 
         f2 = ttk.LabelFrame(self.tab_settings, text="Polling")
         f2.pack(fill=tk.X, padx=12, pady=6)
