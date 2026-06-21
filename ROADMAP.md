@@ -248,6 +248,16 @@ as older than 0.3.0; fixed by renaming the tag to `v0.3.1`.)*
 - 🟡 **"Streak Keeper" counter** — app tracks how many consecutive days *it* caught each
   streamer live and nudges you to tune in. (Approximate — based on the app opening them,
   not Twitch's official number. See "Can't Do Yet" below.)
+- 🟡 **Don't re-open a streamer the app already opened** — cut duplicate browser tabs.
+  ⚠️ The app *cannot* see your browser tabs (browsers wall that off). So the **manually-opened case**
+  (user opened a friend, then the app opened a 2nd tab — the real-world trigger for this idea) genuinely
+  can't be cleanly fixed: the app has no way to know *you* opened it. A window-title scan could
+  *sometimes* catch the foreground tab, but it risks the **worse failure — wrongly skipping a stream
+  you wanted → a missed streak.** Since a dupe tab is harmless and a missed open isn't, living with the
+  occasional manual-case dupe is the safer trade — don't build the window-title hack.
+  **Safe wins (no missed-open risk — only suppress re-opens the *app itself* made):** (a) persist the
+  `opened` set across restarts so stop/start or a reboot doesn't reopen streamers it already opened;
+  (b) an open-cooldown (don't reopen the same streamer within N minutes).
 - 🟡 **Category browsing** — see who's live in a given game right now (Helix supports this)
 - 🟡 **Show "might have Drops" status for watched games — on the Drops Games tab** (deliberately *not*
   Live Status, to keep that tab clean). For each game in the Drops Games list, show a drops indicator
