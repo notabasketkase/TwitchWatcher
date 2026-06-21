@@ -57,13 +57,43 @@ do the **v1.0 UI rehaul** (below) → declare 1.0 once it's polished and proven.
 The chosen gate to 1.0: make it *look* like real software, not just work like it. Bundle the
 theming + layout work into **one deliberate redesign** (don't dribble it out piecemeal):
 
+**Concrete layout (design session 2026-06-21 — dark-theme mockup at `design/v1-mockup.html`):**
+- **Menu bar:** `File` · `Settings` · `Help`
+  - *File* — Exit (someday: export/import config)
+  - *Settings* — API credentials, Clear Saved Secret, Create Desktop Shortcut (the "plumbing" —
+    only touched during setup/troubleshooting). Credentials open as a dialog (the creds-popup idea).
+  - *Help* — Open Setup Guide (PDF), Check for Updates, About (version + Ko-fi link)
+- **Tabs (4):** Live Status · Streamers · Drops Games · **Preferences**
+  - *Preferences* tab = day-to-day behavior: poll interval, auto-start watching, launch on Windows startup
+  - **Split logic:** Preferences = "how it behaves day to day" · Settings = "the plumbing."
+- **Visual polish:** a status strip (live count + last-checked + the Stop Watching button) · group
+  headers as subtle labeled dividers (not table rows) · live rows get a subtle background tint ·
+  an amber **Drops** badge on a *live streamer's* row when their title contains "drops" (reuses the
+  existing title check — essentially free) · cleaned-up log panel · dark theme throughout.
+  *(Note: this per-streamer badge is distinct from the Drops Games tab's game-level drops lookup —
+  "this streamer has drops now" belongs on Live Status; "which games have drops to chase" stays on
+  the Drops Games tab.)*
+
+The bullets below are the *how* for the above:
+
 - **Dark / Light / System theming** — moved here from v0.3.0. `sv_ttk` gives an easy modern base; the
   real work is making the hardcoded colors theme-aware (see the dark-mode color audit lower down).
   Possible "Auto by time" mode could reuse the **SunShift** day/night logic. Apply at startup; avoid
   sudden bright flips.
-- **Modern toolkit / look** — `sv_ttk` (drop-in modern ttk theme) or CustomTkinter (bigger lift).
+- **Modern toolkit / look** — NOTE: the HTML mockup is a *target picture, not the app* (the app's UI is
+  Python/Tkinter; the HTML doesn't plug in). Options to hit that look:
+  - **(a) `sv_ttk` + recreate the layout** — lightest, keeps the working app, ~approximates the mockup
+    (won't be pixel-perfect: Tkinter can't do every CSS trick). **Recommended for v1.**
+  - **(b) CustomTkinter** — more control, bigger lift.
+  - **(c) `pywebview`** — render the actual HTML/CSS (mockup as-is) with the Python backend; *exact* look
+    but a much bigger architectural change (new dep, bigger exe, rewire UI↔Python). A v2-scale bet, not v1.
 - **Settings reorganization** — consider Settings → a menu / Preferences dialog (weigh against
-  discoverability for non-tech users; see the backlog note).
+  discoverability for non-tech users; see the backlog note). **Credentials as a popup:** move the
+  Client ID / Secret OFF the always-visible Settings tab into a modal "Twitch Credentials" dialog —
+  pops on first-run and on demand from a menu item; you fill + Save and it closes. Keeps creds
+  off-screen during normal use (nicer for screen-sharing) and de-clutters the main UI. Editing later
+  reopens the dialog (Client ID from config, Secret masked from Credential Manager). Pairs with the
+  Settings-into-a-menu idea above.
 - **Layout polish** — spacing, grouping; maybe live-sort (online-above-offline) + collapsible groups.
 - **Restyle the log** — it's a raw monospace `Text` box today. In the rehaul: theme-aware colors,
   **color-coded entries** via Text tags (green = went live/opened · gray = offline · gold = drops 🎁
@@ -71,7 +101,15 @@ theming + layout work into **one deliberate redesign** (don't dribble it out pie
   least logic — it's the most "terminal-looking" part right now. (Requested as part of the rehaul.)
 
 Keep it deliberate — this is what makes you confident to stamp "1.0," so give it room rather than
-rushing. Ship v0.3.0 first; start the rehaul after it's had some real-world use.
+rushing. (v0.3.x is shipped; start the rehaul as its own focused effort once it's had real-world use.)
+
+**Approach — treat it as a real step:**
+- 🌿 **Do it on a dedicated git branch** (e.g. `ui-rehaul`) so `main` / the released app stays safe
+  while you experiment freely; merge to main only when it's solid. (First time branching — good place to learn it.)
+- 🧩 **Phase it, don't big-bang:** (1) theming foundation (sv_ttk) → (2) make widgets theme-aware →
+  (3) dark/light/system toggle → (4) Settings reorg → (5) restyled log. Each phase a working step.
+- 🔬 **Spike first:** try sv_ttk vs CustomTkinter on a throwaway copy to feel the look before committing.
+- Becomes **v1.0** when it's polished and proven — no deadline.
 
 ---
 
@@ -110,8 +148,16 @@ Small, high-value fixes from real users after v0.3.0:
 - ✅ **Clickable guide link in the README** — the PDF is now a real link from the GitHub page.
 - ✅ **Sort the Streamers list by column** — click a header to sort, click again to reverse.
 
-Remaining: rebuild → push → cut the v0.3.1 release. (Live-Status "online-above-offline" sort stays
-deferred to the v1 rehaul.)
+**✅ v0.3.1 released 2026-06-18** (tag `v0.3.1`; auto-update verified — v0.3.0 users get the ping).
+*(The release tag was first cut as `v.0.3.1` — a stray dot that made the version-compare misread it
+as older than 0.3.0; fixed by renaming the tag to `v0.3.1`.)*
+- ↪️ **Next-version tweak:** harden `_parse_version` so a malformed tag (e.g. `v.0.3.1`) can't be
+  misread — pull digit-groups in order and ignore stray separators. Future-proofs the update-check.
+- 🟢 **"Start minimized to tray" option** — on launch, go straight to the tray instead of popping the
+  window. Completes silent set-and-forget: with run-on-startup + autostart-watching it boots, hides,
+  and starts watching with no window flash. Settings toggle; on launch `withdraw()` the window if
+  enabled (needs the tray available). Edge case: don't hide on first-run when there are no creds yet.
+- Live-Status "online-above-offline" sort still deferred to the v1 rehaul.
 
 - ⭐ **Minimize to system tray — PRIORITY for the next v0.3.0 session.** Run quietly in the
   background, no taskbar clutter, with a tray right-click menu (Show / Quit). The most
@@ -203,6 +249,16 @@ deferred to the v1 rehaul.)
   streamer live and nudges you to tune in. (Approximate — based on the app opening them,
   not Twitch's official number. See "Can't Do Yet" below.)
 - 🟡 **Category browsing** — see who's live in a given game right now (Helix supports this)
+- 🟡 **Show "might have Drops" status for watched games — on the Drops Games tab** (deliberately *not*
+  Live Status, to keep that tab clean). For each game in the Drops Games list, show a drops indicator
+  (e.g. 🎁 "Drops live" / "—") by scanning that game's current live streams for drops signals (Helix
+  Get Streams by game_id — resolve name→id via Get Games & cache; check title "drops"). Official API +
+  app-token only, no login. **Honest caveat:** it's a *heuristic* off current live streams — "drops
+  appear live," not a guaranteed campaign list (misses campaigns with nobody streaming). AVOID
+  `gql.twitch.tv` GraphQL / third-party scrapers (would break the official-API promise).
+- 🟢 **Companion: "Browse Twitch Drops" button (also on the Drops Games tab)** — opens Twitch's native
+  active-campaigns page (`twitch.tv/drops/campaigns`) in the browser. Trivial, always 100% accurate
+  (Twitch's own data). The indicator gives an at-a-glance hint; this button is the authoritative list.
 - 🚫 **Mobile app — out of scope (not a port).** Testers ask occasionally. Phones can't run the
   Tkinter/exe, mobile OSes block the background-polling + auto-open the app relies on, and the
   "keep my streak alive 24/7" purpose needs an always-on machine (a phone isn't one). A *real* mobile
