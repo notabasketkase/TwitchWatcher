@@ -258,6 +258,30 @@ as older than 0.3.0; fixed by renaming the tag to `v0.3.1`.)*
   **Safe wins (no missed-open risk — only suppress re-opens the *app itself* made):** (a) persist the
   `opened` set across restarts so stop/start or a reboot doesn't reopen streamers it already opened;
   (b) an open-cooldown (don't reopen the same streamer within N minutes).
+- 🟡 **Single-instance enforcement** — stop a *second copy of the app* from running (distinct from the
+  tab item above — this is about duplicate *app* instances). Easy to trigger by accident with a
+  shortcut + run-on-startup + tray; two instances = double notifications/opens + two tray icons. On
+  launch, detect an existing instance (Windows named mutex, a PID lockfile, or binding a fixed
+  localhost port) and either quietly exit the duplicate or — nicer — signal the running one to
+  restore/show its window. Worth it specifically because the app is designed to live in the tray.
+- 🟡 **Per-streamer mode picker (fix the Auto-Open × Drops-Only confusion)** — the two checkboxes
+  interact non-obviously: `auto_open` = open vs notify-only; `drops_only` = trigger only on drops. So
+  **"Auto-Open OFF + Drops-Only ON" = "never open, even on drops"** — which surprised a user who read
+  it as "open only on drops" (that combo is actually Drops-Only ON + Auto-Open ON). Fix: replace the
+  two interacting booleans with one clear per-streamer **mode** dropdown — "Open when live" / "Open
+  on Drops" / "Notify only" (+ optional niche "Notify on Drops") — pick the *finished behavior by
+  name*, so contradictory combos are impossible and there's no mental math. **Bonus:** collapses the
+  Streamers tab's two columns (Drops Only + Auto-Open) into ONE "Mode" column — tidier. Set it via a
+  dropdown — cleanest is to extend the existing "Edit Group" dialog into "Edit Streamer" (Group +
+  Mode), replacing the two Toggle buttons. Start with 3 core modes; add the 4th only if asked.
+  Interim (no rebuild): clearer labels / a help tooltip. Natural fit for the v1 UI work.
+- 🟢 **Favorites (★) — mark your must-catch streamers** — a per-streamer favorite flag + a clickable
+  ★ in the Streamers / Live Status rows. A *third axis*, separate from Groups (categorize) and Mode
+  (behavior): favorites = **priority**. Useful version: starred streamers **pin/sort to the top** so
+  your key people are always front-and-center across groups; optional "show favorites only" filter.
+  Easy (a boolean + star icon + sort). **Design Q:** on the grouped Live Status, do favorites get a
+  pinned "★ Favorites" section at the very top (cross-group) or just an inline star within their
+  group? (Pinned section = more useful; inline = simpler.) Fits the v1 UI polish.
 - 🟡 **Category browsing** — see who's live in a given game right now (Helix supports this)
 - 🟡 **Show "might have Drops" status for watched games — on the Drops Games tab** (deliberately *not*
   Live Status, to keep that tab clean). For each game in the Drops Games list, show a drops indicator
