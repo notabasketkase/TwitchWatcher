@@ -282,6 +282,12 @@ as older than 0.3.0; fixed by renaming the tag to `v0.3.1`.)*
   Easy (a boolean + star icon + sort). **Design Q:** on the grouped Live Status, do favorites get a
   pinned "★ Favorites" section at the very top (cross-group) or just an inline star within their
   group? (Pinned section = more useful; inline = simpler.) Fits the v1 UI polish.
+- 🟢 **(Maybe) redesign the app icon** — user's reconsidering the purple-circle + white-play-triangle
+  (reads a bit generic, like a media "play" button). Directions: an **eye** (a "watcher"), a **tiger**
+  / tiger-stripe (ties to *tygrisnox*), a **bell** (alerts), or a more distinctive play mark.
+  ⚠️ Constraint: don't mimic Twitch's actual glitch logo (trademark — same reason the dev-console name
+  avoids "Twitch"). Twitch-purple is fine. Whatever's chosen, apply the transparent + multi-size
+  treatment (16–256px) — already scripted (`icon.png` → multi-size `icon.ico`).
 - 🟡 **Category browsing** — see who's live in a given game right now (Helix supports this)
 - 🟡 **Show "might have Drops" status for watched games — on the Drops Games tab** (deliberately *not*
   Live Status, to keep that tab clean). For each game in the Drops Games list, show a drops indicator
