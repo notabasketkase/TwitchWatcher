@@ -258,12 +258,14 @@ as older than 0.3.0; fixed by renaming the tag to `v0.3.1`.)*
   **Safe wins (no missed-open risk — only suppress re-opens the *app itself* made):** (a) persist the
   `opened` set across restarts so stop/start or a reboot doesn't reopen streamers it already opened;
   (b) an open-cooldown (don't reopen the same streamer within N minutes).
-- 🟡 **Single-instance enforcement** — stop a *second copy of the app* from running (distinct from the
-  tab item above — this is about duplicate *app* instances). Easy to trigger by accident with a
-  shortcut + run-on-startup + tray; two instances = double notifications/opens + two tray icons. On
-  launch, detect an existing instance (Windows named mutex, a PID lockfile, or binding a fixed
-  localhost port) and either quietly exit the duplicate or — nicer — signal the running one to
-  restore/show its window. Worth it specifically because the app is designed to live in the tray.
+- ✅ **Single-instance enforcement** (done 2026-06-30) — a second launch no longer starts a duplicate
+  watcher (which was firing double notifications/opens → the "multi tabs" problem, especially on the
+  7 AM morning-wake launch when the app was already running). Implemented in `single_instance.py`: the
+  first instance binds a fixed loopback port (`127.0.0.1:52789`) as a lock and listens; a second launch
+  can't bind, so it pings the running instance to **show/restore its window** and then exits. Loopback-
+  only (no firewall prompt), and the OS frees the lock on crash (no stale lockfile). Covers all launch
+  paths — morning-wake task, run-on-startup, and desktop double-click — so the scheduled task can keep
+  launching the exe directly with no guard of its own.
 - 🟡 **Per-streamer mode picker (fix the Auto-Open × Drops-Only confusion)** — the two checkboxes
   interact non-obviously: `auto_open` = open vs notify-only; `drops_only` = trigger only on drops. So
   **"Auto-Open OFF + Drops-Only ON" = "never open, even on drops"** — which surprised a user who read

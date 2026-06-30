@@ -28,13 +28,27 @@ Security notes:
 import tkinter as tk
 
 from ui import TwitchWatcherApp
+from single_instance import SingleInstance
 
 
 def main():
+    # Single-instance guard: if TwitchWatcher is already running, ask the
+    # running copy to show its window and exit instead of starting a second
+    # watcher (which would fire duplicate "go live → open browser" actions).
+    instance = SingleInstance()
+    if not instance.acquire():
+        return
+
     root = tk.Tk()
     app = TwitchWatcherApp(root)
     app._rebuild_live_rows()
-    root.mainloop()
+    # When another launch pings us, surface the existing window (reuses the
+    # same tray-restore path, which marshals back to the Tk thread).
+    instance.start_listener(app._show_window)
+    try:
+        root.mainloop()
+    finally:
+        instance.release()
 
 
 if __name__ == "__main__":
