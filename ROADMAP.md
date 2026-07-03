@@ -258,14 +258,20 @@ as older than 0.3.0; fixed by renaming the tag to `v0.3.1`.)*
   **Safe wins (no missed-open risk — only suppress re-opens the *app itself* made):** (a) persist the
   `opened` set across restarts so stop/start or a reboot doesn't reopen streamers it already opened;
   (b) an open-cooldown (don't reopen the same streamer within N minutes).
-- ✅ **Single-instance enforcement** (done 2026-06-30) — a second launch no longer starts a duplicate
-  watcher (which was firing double notifications/opens → the "multi tabs" problem, especially on the
-  7 AM morning-wake launch when the app was already running). Implemented in `single_instance.py`: the
-  first instance binds a fixed loopback port (`127.0.0.1:52789`) as a lock and listens; a second launch
-  can't bind, so it pings the running instance to **show/restore its window** and then exits. Loopback-
-  only (no firewall prompt), and the OS frees the lock on crash (no stale lockfile). Covers all launch
-  paths — morning-wake task, run-on-startup, and desktop double-click — so the scheduled task can keep
-  launching the exe directly with no guard of its own.
+- ✅ **Single-instance enforcement** (done 2026-06-30, hardened 2026-07-03) — a second launch no longer
+  starts a duplicate watcher (which was firing double notifications/opens → the "multi tabs" problem,
+  especially on the 7 AM morning-wake launch when the app was already running). Implemented in
+  `single_instance.py`: a **Windows named mutex** is the lock (reboot-proof, no ports/permissions, OS
+  frees it on crash); a **best-effort loopback socket** (`127.0.0.1:47654`) lets a blocked launch ping
+  the running instance to **show/restore its window** before exiting. Covers all launch paths —
+  morning-wake task, run-on-startup, desktop shortcut — so the scheduled task launches the exe directly
+  with no guard of its own.
+  - **BUG FIXED 2026-07-03:** the first version used a loopback port *as the lock* and treated any bind
+    failure as "already running". After a reboot, Windows' reserved dynamic-port ranges (Hyper-V/WSL)
+    shifted over the hardcoded `52789`, so `bind()` failed with WinError 10013 and the app **silently
+    refused to start** — breaking both the shortcut and auto-start. Fix: switch the lock to a named
+    mutex and make the guard **fail open** (any uncertainty → run the app). Lesson: a single-instance
+    guard must never be able to prevent the app from launching.
 - 🟡 **Per-streamer mode picker (fix the Auto-Open × Drops-Only confusion)** — the two checkboxes
   interact non-obviously: `auto_open` = open vs notify-only; `drops_only` = trigger only on drops. So
   **"Auto-Open OFF + Drops-Only ON" = "never open, even on drops"** — which surprised a user who read
