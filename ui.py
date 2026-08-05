@@ -579,21 +579,32 @@ class TwitchWatcherApp:
 
     def _poll_loop(self):
         client_id = self.cfg["client_id"]
-        secret    = load_secret()
-        try:
-            self.token = get_app_token(client_id, secret)
-            self._log("Token acquired. Credentials cleared from memory.")
-        except Exception as e:
-            self._log(f"Auth error: {e}")
-            self.root.after(0, self._toggle_watch)
-            return
-        finally:
-            del secret
+        self.token = None
 
         while self.watching:
-            self._do_poll(client_id)
-            interval = self.cfg.get("poll_interval", 300)
-            for _ in range(interval * 2):
+            # (Re)acquire a token whenever we don't have one. A failure here —
+            # e.g. the network isn't up yet after a wake, or the connection
+            # dropped — no longer stops the watcher: we keep retrying until it
+            # succeeds, so the watcher recovers on its own when the internet
+            # comes back instead of silently switching itself off.
+            if self.token is None:
+                secret = load_secret()
+                try:
+                    self.token = get_app_token(client_id, secret)
+                    self._log("Token acquired. Credentials cleared from memory.")
+                except Exception as e:
+                    self._log(f"Auth error (will keep retrying): {e}")
+                    self.root.after(0, self.status_var.set, "Waiting for connection…")
+                finally:
+                    del secret
+
+            if self.token is not None:
+                self._do_poll(client_id)
+
+            # Poll at the normal interval once connected; while we still can't
+            # get a token, retry quickly (every 15s) so recovery is prompt.
+            interval = self.cfg.get("poll_interval", 300) if self.token is not None else 15
+            for _ in range(int(interval * 2)):
                 if not self.watching:
                     break
                 time.sleep(0.5)
@@ -623,6 +634,7 @@ class TwitchWatcherApp:
                 return
         except Exception as e:
             self._log(f"Network error: {e}")
+            self.root.after(0, self.status_var.set, "Network error — retrying…")
             return
 
         ts       = time.strftime("%H:%M:%S")
