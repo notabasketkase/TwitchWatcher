@@ -334,7 +334,7 @@ class TwitchWatcherApp:
                 vl.grid(row=current_row, column=4, padx=6, pady=1, sticky="w")
                 ob.grid(row=current_row, column=5, padx=6, pady=1)
 
-                self.status_rows[name] = {"status": sl, "game": gl, "title": tl, "viewers": vl}
+                self.status_rows[name] = {"name": nl, "status": sl, "game": gl, "title": tl, "viewers": vl}
                 current_row += 1
 
     def _update_live_row(self, name, info=None):
@@ -342,11 +342,13 @@ class TwitchWatcherApp:
             return
         w = self.status_rows[name]
         if info:
-            w["status"].config(text="🟢 LIVE", foreground="green")
+            w["name"].config(foreground=self._pal["live"])
+            w["status"].config(text="🟢 LIVE", foreground=self._pal["live"])
             w["game"].config(text=(info["game"] or "—")[:22])
             w["title"].config(text=(info["title"] or "—")[:38])
             w["viewers"].config(text=f'{info["viewers"]:,}')
         else:
+            w["name"].config(foreground=self._pal["muted"])
             w["status"].config(text="⚫ offline", foreground=self._pal["muted"])
             w["game"].config(text="—")
             w["title"].config(text="—")
