@@ -31,6 +31,7 @@ DEFAULT_CONFIG = {
     "autostart": False,     # if True, start watching automatically on launch
     "streamers": [],        # [{"name": "...", "drops_only": false, "auto_open": true, "group": "General"}]
     "drops_watch_games": [],
+    "theme": "dark",        # "dark" | "light" | "system" (dark-first: no bright flash on launch)
 }
 
 

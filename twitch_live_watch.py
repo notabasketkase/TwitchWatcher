@@ -40,13 +40,9 @@ def main():
         return
 
     root = tk.Tk()
-    # v1 UI rehaul — modern theme foundation (phase 1). Falls back silently to
-    # the default Tk look if sv_ttk isn't available, so the app still runs.
-    try:
-        import sv_ttk
-        sv_ttk.set_theme("dark")
-    except Exception:
-        pass
+    # The modern sv_ttk theme is applied inside TwitchWatcherApp.__init__ from
+    # the user's saved theme choice (dark / light / system), before any widgets
+    # are built — so the window opens already themed, no bright flash.
     app = TwitchWatcherApp(root)
     app._rebuild_live_rows()
     # When another launch pings us, surface the existing window (reuses the

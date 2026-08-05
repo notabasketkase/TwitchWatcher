@@ -59,7 +59,12 @@ class TwitchWatcherApp:
         self.tray_icon           = None
         self._tray_hint_shown    = False
         self._last_log_date      = ""
+        self._muted_labels       = []   # persistent muted labels (re-colored on theme switch)
+        self._live_muted_labels  = []   # muted labels rebuilt with the live table
 
+        # Apply the saved theme (dark/light/system) BEFORE building any widgets,
+        # so the window opens already themed with no bright flash.
+        self._apply_saved_theme()
         self._pal = self._palette()
         self._build_ui()
         self._populate_settings()
@@ -121,6 +126,57 @@ class TwitchWatcherApp:
         self.toggle_btn.pack(side=tk.RIGHT)
 
         self._apply_tk_theme()
+
+    def _windows_theme(self):
+        """Return 'dark' or 'light' from the Windows apps-theme setting."""
+        try:
+            import winreg
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                    r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize") as key:
+                val, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+            return "light" if val == 1 else "dark"
+        except Exception:
+            return "dark"  # safe default if we can't read it
+
+    def _resolve_theme(self, choice):
+        """Map a saved choice (dark/light/system) to an actual 'dark'/'light'."""
+        if choice == "system":
+            return self._windows_theme()
+        return choice if choice in ("dark", "light") else "dark"
+
+    def _apply_saved_theme(self):
+        """Set the sv_ttk theme from the saved choice (startup path — no widget
+        recolor yet; _apply_tk_theme runs later once widgets exist)."""
+        resolved = self._resolve_theme(self.cfg.get("theme", "dark"))
+        try:
+            import sv_ttk
+            sv_ttk.set_theme(resolved)
+        except Exception:
+            pass
+
+    def _on_theme_change(self):
+        """Appearance radio buttons → persist + apply the new theme live."""
+        self._set_theme(self.theme_var.get())
+
+    def _set_theme(self, choice):
+        """Persist the theme choice and apply it immediately across the app."""
+        self.cfg["theme"] = choice
+        save_config(self.cfg)
+        resolved = self._resolve_theme(choice)
+        try:
+            import sv_ttk
+            if sv_ttk.get_theme() != resolved:
+                sv_ttk.set_theme(resolved)
+        except Exception:
+            pass
+        # Recompute the palette and recolor the parts sv_ttk doesn't touch:
+        # the raw tk widgets and every muted label (persistent + live-table).
+        self._apply_tk_theme()
+        for lbl in self._muted_labels + self._live_muted_labels:
+            try:
+                lbl.configure(foreground=self._pal["muted"])
+            except Exception:
+                pass
 
     def _palette(self):
         """Theme-aware colors for the raw tk widgets and the previously
@@ -196,11 +252,13 @@ class TwitchWatcherApp:
         for w in self.live_frame.winfo_children():
             w.destroy()
         self.status_rows = {}
+        self._live_muted_labels = []  # rebuilt fresh each time this runs
 
         streamers = self.cfg.get("streamers", [])
         if not streamers:
-            ttk.Label(self.live_frame, text="No streamers added yet.", foreground=self._pal["muted"]).grid(
-                row=0, column=0, padx=8, pady=8)
+            nl = ttk.Label(self.live_frame, text="No streamers added yet.", foreground=self._pal["muted"])
+            nl.grid(row=0, column=0, padx=8, pady=8)
+            self._live_muted_labels.append(nl)
             return
 
         # Collect unique groups in the order they first appear
@@ -224,9 +282,10 @@ class TwitchWatcherApp:
             ttk.Separator(self.live_frame, orient="horizontal").grid(
                 row=current_row, column=0, columnspan=6, sticky="ew", pady=(6, 0))
             current_row += 1
-            ttk.Label(self.live_frame, text=f"  {group}",
-                      font=("", 8, "bold"), foreground=self._pal["muted"]).grid(
-                row=current_row, column=0, columnspan=6, sticky="w", padx=4, pady=(0, 2))
+            gh = ttk.Label(self.live_frame, text=f"  {group}",
+                           font=("", 8, "bold"), foreground=self._pal["muted"])
+            gh.grid(row=current_row, column=0, columnspan=6, sticky="w", padx=4, pady=(0, 2))
+            self._live_muted_labels.append(gh)
             current_row += 1
 
             for s in group_streamers:
@@ -494,8 +553,10 @@ class TwitchWatcherApp:
                   font=("", 8)).grid(row=2, column=0, columnspan=2, padx=6, pady=(2, 4), sticky="w")
 
         config_note = f"ℹ  Streamer list, game list, and poll interval are saved to:\n{CONFIG_FILE}"
-        ttk.Label(f, text=config_note, wraplength=500, foreground=self._pal["muted"],
-                  font=("", 8)).grid(row=3, column=0, columnspan=2, padx=6, pady=(0, 8), sticky="w")
+        note_lbl = ttk.Label(f, text=config_note, wraplength=500, foreground=self._pal["muted"],
+                             font=("", 8))
+        note_lbl.grid(row=3, column=0, columnspan=2, padx=6, pady=(0, 8), sticky="w")
+        self._muted_labels.append(note_lbl)
         ttk.Button(f, text="📄  Open Setup Guide", command=self._open_setup_guide).grid(
             row=4, column=0, columnspan=2, padx=6, pady=(0, 8), sticky="w")
 
@@ -511,6 +572,14 @@ class TwitchWatcherApp:
         self.run_on_startup_var = tk.BooleanVar()
         ttk.Checkbutton(f2, text="Launch TwitchWatcher when Windows starts",
                         variable=self.run_on_startup_var).grid(row=2, column=0, columnspan=2, sticky="w", padx=6, pady=4)
+
+        f3 = ttk.LabelFrame(self.tab_settings, text="Appearance")
+        f3.pack(fill=tk.X, padx=12, pady=6)
+        ttk.Label(f3, text="Theme:").grid(row=0, column=0, sticky="e", padx=6, pady=6)
+        self.theme_var = tk.StringVar(value=self.cfg.get("theme", "dark"))
+        for i, (label, val) in enumerate([("Dark", "dark"), ("Light", "light"), ("System", "system")]):
+            ttk.Radiobutton(f3, text=label, value=val, variable=self.theme_var,
+                            command=self._on_theme_change).grid(row=0, column=1 + i, padx=6, pady=6, sticky="w")
 
         btn_row = ttk.Frame(self.tab_settings)
         btn_row.pack(fill=tk.X, padx=12, pady=10)
@@ -530,6 +599,7 @@ class TwitchWatcherApp:
         self.interval_var.set(self.cfg.get("poll_interval", 300))
         self.autostart_var.set(self.cfg.get("autostart", False))
         self.run_on_startup_var.set(is_run_on_startup())
+        self.theme_var.set(self.cfg.get("theme", "dark"))
 
     def _save_settings(self):
         self.cfg["client_id"]    = self.cid_var.get().strip()
