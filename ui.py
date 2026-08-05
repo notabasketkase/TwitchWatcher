@@ -68,6 +68,7 @@ class TwitchWatcherApp:
         self._apply_saved_theme()
         self._pal = self._palette()
         self._build_ui()
+        self._apply_titlebar_theme(nudge=True)
         self._populate_preferences()
         self._populate_streamers()
         self._populate_games()
@@ -172,6 +173,31 @@ class TwitchWatcherApp:
         except Exception:
             pass
 
+    def _apply_titlebar_theme(self, nudge=False):
+        """Match the Windows title bar to the app theme so it isn't a jarring
+        light strip over the dark UI. Uses DWM immersive dark mode (Win10 2004+
+        / Win11); silently does nothing on older/other systems. nudge=True forces
+        a quick redraw so a *live* theme switch re-tints the bar immediately."""
+        if sys.platform != "win32":
+            return
+        try:
+            import ctypes
+            resolved = self._resolve_theme(self.cfg.get("theme", "dark"))
+            value = ctypes.c_int(1 if resolved == "dark" else 0)
+            self.root.update_idletasks()
+            hwnd = ctypes.windll.user32.GetParent(self.root.winfo_id())
+            # DWMWA_USE_IMMERSIVE_DARK_MODE = 20 (newer), 19 on early 2004 builds.
+            for attr in (20, 19):
+                if ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                        hwnd, attr, ctypes.byref(value), ctypes.sizeof(value)) == 0:
+                    break
+            if nudge:
+                # Force the frame to repaint so the new bar color shows at once.
+                self.root.withdraw()
+                self.root.deiconify()
+        except Exception:
+            pass
+
     def _on_theme_change(self):
         """Appearance radio buttons → persist + apply the new theme live."""
         self._set_theme(self.theme_var.get())
@@ -195,6 +221,7 @@ class TwitchWatcherApp:
                 lbl.configure(foreground=self._pal["muted"])
             except Exception:
                 pass
+        self._apply_titlebar_theme(nudge=True)
 
     def _palette(self):
         """Theme-aware colors for the raw tk widgets and the previously
