@@ -67,7 +67,7 @@ class TwitchWatcherApp:
         self._apply_saved_theme()
         self._pal = self._palette()
         self._build_ui()
-        self._populate_settings()
+        self._populate_preferences()
         self._populate_streamers()
         self._populate_games()
 
@@ -90,33 +90,50 @@ class TwitchWatcherApp:
     # UI
     # =========================================================================
     def _build_ui(self):
-        # Menu bar — a clear, discoverable way to quit, since the ✕ now hides to tray
+        # Menu bar. Split logic: Settings menu = "the plumbing" (setup/troubleshooting);
+        # the Preferences tab = "how it behaves day to day".
         menubar = tk.Menu(self.root)
+
         file_menu = tk.Menu(menubar, tearoff=0)
         if PYSTRAY_AVAILABLE:
             file_menu.add_command(label="Hide to Tray", command=self._hide_to_tray)
             file_menu.add_separator()
         file_menu.add_command(label="Quit", command=self._quit_app)
         menubar.add_cascade(label="File", menu=file_menu)
+
+        settings_menu = tk.Menu(menubar, tearoff=0)
+        settings_menu.add_command(label="Twitch Credentials…", command=self._open_credentials_dialog)
+        settings_menu.add_separator()
+        settings_menu.add_command(label="Clear Saved Secret", command=self._clear_secret)
+        settings_menu.add_command(label="Create Desktop Shortcut", command=self._create_shortcut)
+        menubar.add_cascade(label="Settings", menu=settings_menu)
+
+        help_menu = tk.Menu(menubar, tearoff=0)
+        help_menu.add_command(label="Open Setup Guide", command=self._open_setup_guide)
+        help_menu.add_command(label="Check for Updates", command=self._check_updates_clicked)
+        help_menu.add_separator()
+        help_menu.add_command(label="About TwitchWatcher", command=self._show_about)
+        menubar.add_cascade(label="Help", menu=help_menu)
+
         self.root.config(menu=menubar)
 
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
 
-        self.tab_live     = ttk.Frame(self.notebook)
-        self.tab_stream   = ttk.Frame(self.notebook)
-        self.tab_games    = ttk.Frame(self.notebook)
-        self.tab_settings = ttk.Frame(self.notebook)
+        self.tab_live   = ttk.Frame(self.notebook)
+        self.tab_stream = ttk.Frame(self.notebook)
+        self.tab_games  = ttk.Frame(self.notebook)
+        self.tab_prefs  = ttk.Frame(self.notebook)
 
-        self.notebook.add(self.tab_live,     text="  Live Status  ")
-        self.notebook.add(self.tab_stream,   text="  Streamers  ")
-        self.notebook.add(self.tab_games,    text="  Drops Games  ")
-        self.notebook.add(self.tab_settings, text="  Settings  ")
+        self.notebook.add(self.tab_live,   text="  Live Status  ")
+        self.notebook.add(self.tab_stream, text="  Streamers  ")
+        self.notebook.add(self.tab_games,  text="  Drops Games  ")
+        self.notebook.add(self.tab_prefs,  text="  Preferences  ")
 
         self._build_live_tab()
         self._build_streamers_tab()
         self._build_games_tab()
-        self._build_settings_tab()
+        self._build_preferences_tab()
 
         bar = ttk.Frame(self.root)
         bar.pack(fill=tk.X, padx=8, pady=(0, 8))
@@ -527,41 +544,11 @@ class TwitchWatcherApp:
     # -------------------------------------------------------------------------
     # Settings tab
     # -------------------------------------------------------------------------
-    def _build_settings_tab(self):
-        f = ttk.LabelFrame(self.tab_settings, text="Twitch API Credentials")
-        f.pack(fill=tk.X, padx=12, pady=10)
-
-        ttk.Label(f, text="Client ID:").grid(row=0, column=0, sticky="e", padx=6, pady=4)
-        self.cid_var = tk.StringVar()
-        ttk.Entry(f, textvariable=self.cid_var, width=44).grid(row=0, column=1, padx=6, pady=4)
-
-        ttk.Label(f, text="Client Secret:").grid(row=1, column=0, sticky="e", padx=6, pady=4)
-        self.csec_var = tk.StringVar()
-        ttk.Entry(f, textvariable=self.csec_var, width=44, show="*").grid(row=1, column=1, padx=6, pady=4)
-
-        if KEYRING_AVAILABLE:
-            security_text  = ("🔒  Your Client Secret is stored in Windows Credential Manager — "
-                              "the same encrypted vault your browser uses for saved passwords. "
-                              "It is never written to the config file on disk.")
-            security_color = "green"
-        else:
-            security_text  = ("⚠  keyring not installed. Secret will be stored in plain text. "
-                              "Run: pip install keyring")
-            security_color = "orange"
-
-        ttk.Label(f, text=security_text, wraplength=500, foreground=security_color,
-                  font=("", 8)).grid(row=2, column=0, columnspan=2, padx=6, pady=(2, 4), sticky="w")
-
-        config_note = f"ℹ  Streamer list, game list, and poll interval are saved to:\n{CONFIG_FILE}"
-        note_lbl = ttk.Label(f, text=config_note, wraplength=500, foreground=self._pal["muted"],
-                             font=("", 8))
-        note_lbl.grid(row=3, column=0, columnspan=2, padx=6, pady=(0, 8), sticky="w")
-        self._muted_labels.append(note_lbl)
-        ttk.Button(f, text="📄  Open Setup Guide", command=self._open_setup_guide).grid(
-            row=4, column=0, columnspan=2, padx=6, pady=(0, 8), sticky="w")
-
-        f2 = ttk.LabelFrame(self.tab_settings, text="Polling")
-        f2.pack(fill=tk.X, padx=12, pady=6)
+    def _build_preferences_tab(self):
+        # Day-to-day behavior. (The "plumbing" — credentials, clear secret,
+        # shortcut — lives in the Settings menu instead.)
+        f2 = ttk.LabelFrame(self.tab_prefs, text="Polling")
+        f2.pack(fill=tk.X, padx=12, pady=(12, 6))
         ttk.Label(f2, text="Check interval (seconds):").grid(row=0, column=0, sticky="e", padx=6, pady=4)
         self.interval_var = tk.IntVar()
         ttk.Spinbox(f2, from_=30, to=3600, increment=30, textvariable=self.interval_var, width=8).grid(
@@ -573,7 +560,7 @@ class TwitchWatcherApp:
         ttk.Checkbutton(f2, text="Launch TwitchWatcher when Windows starts",
                         variable=self.run_on_startup_var).grid(row=2, column=0, columnspan=2, sticky="w", padx=6, pady=4)
 
-        f3 = ttk.LabelFrame(self.tab_settings, text="Appearance")
+        f3 = ttk.LabelFrame(self.tab_prefs, text="Appearance")
         f3.pack(fill=tk.X, padx=12, pady=6)
         ttk.Label(f3, text="Theme:").grid(row=0, column=0, sticky="e", padx=6, pady=6)
         self.theme_var = tk.StringVar(value=self.cfg.get("theme", "dark"))
@@ -581,48 +568,123 @@ class TwitchWatcherApp:
             ttk.Radiobutton(f3, text=label, value=val, variable=self.theme_var,
                             command=self._on_theme_change).grid(row=0, column=1 + i, padx=6, pady=6, sticky="w")
 
-        btn_row = ttk.Frame(self.tab_settings)
+        btn_row = ttk.Frame(self.tab_prefs)
         btn_row.pack(fill=tk.X, padx=12, pady=10)
-        ttk.Button(btn_row, text="Save Settings",     command=self._save_settings).pack(side=tk.LEFT)
-        ttk.Button(btn_row, text="Clear Saved Secret", command=self._clear_secret).pack(side=tk.LEFT, padx=8)
-        ttk.Button(btn_row, text="Create Desktop Shortcut", command=self._create_shortcut).pack(side=tk.LEFT, padx=8)
-        ttk.Button(btn_row, text="Check for Updates", command=self._check_updates_clicked).pack(side=tk.LEFT, padx=8)
+        ttk.Button(btn_row, text="Save Preferences", command=self._save_preferences).pack(side=tk.LEFT)
+
+        note = ttk.Label(self.tab_prefs,
+                         text=("ℹ  Twitch credentials live under Settings → Twitch Credentials.\n"
+                               f"Your streamer list and preferences are saved to:\n{CONFIG_FILE}"),
+                         wraplength=520, foreground=self._pal["muted"], font=("", 8))
+        note.pack(padx=12, pady=(0, 6), anchor="w")
+        self._muted_labels.append(note)
 
         if not PLYER_AVAILABLE:
-            ttk.Label(self.tab_settings,
+            ttk.Label(self.tab_prefs,
                 text="⚠  plyer not installed — notifications disabled. Run: pip install plyer",
                 foreground="orange", font=("", 8)).pack(padx=12, anchor="w")
 
-    def _populate_settings(self):
-        self.cid_var.set(self.cfg.get("client_id", ""))
-        self.csec_var.set(load_secret())
+    def _populate_preferences(self):
         self.interval_var.set(self.cfg.get("poll_interval", 300))
         self.autostart_var.set(self.cfg.get("autostart", False))
         self.run_on_startup_var.set(is_run_on_startup())
         self.theme_var.set(self.cfg.get("theme", "dark"))
 
-    def _save_settings(self):
-        self.cfg["client_id"]    = self.cid_var.get().strip()
+    def _save_preferences(self):
         self.cfg["poll_interval"] = self.interval_var.get()
         self.cfg["autostart"]     = self.autostart_var.get()
         save_config(self.cfg)
-        secret = self.csec_var.get().strip()
-        if secret and not all(c == "*" for c in secret):
-            store_secret(secret)
-            self.csec_var.set("*" * len(secret))
         try:
             set_run_on_startup(self.run_on_startup_var.get())
         except Exception as e:
             messagebox.showwarning("Startup setting",
                                    f"Couldn't update the Windows startup entry:\n{e}")
-        messagebox.showinfo("Saved",
-            "Settings saved.\n\nClient ID → config file\nClient Secret → Windows Credential Manager")
+        messagebox.showinfo("Saved", "Preferences saved.")
+
+    def _open_credentials_dialog(self):
+        """Modal dialog to enter/update the Twitch Client ID + Secret. Keeping
+        credentials off the main window is nicer during screen-sharing and
+        de-clutters the UI."""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Twitch Credentials")
+        dialog.resizable(False, False)
+        dialog.grab_set()
+
+        frm = ttk.Frame(dialog, padding=14)
+        frm.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Label(frm, text="Client ID:").grid(row=0, column=0, sticky="e", padx=6, pady=6)
+        cid_var = tk.StringVar(value=self.cfg.get("client_id", ""))
+        cid_entry = ttk.Entry(frm, textvariable=cid_var, width=46)
+        cid_entry.grid(row=0, column=1, padx=6, pady=6)
+
+        ttk.Label(frm, text="Client Secret:").grid(row=1, column=0, sticky="e", padx=6, pady=6)
+        csec_var = tk.StringVar(value=load_secret())
+        ttk.Entry(frm, textvariable=csec_var, width=46, show="*").grid(row=1, column=1, padx=6, pady=6)
+
+        if KEYRING_AVAILABLE:
+            sec_text  = ("🔒  Your Client Secret is stored in Windows Credential Manager — the same "
+                         "encrypted vault your browser uses for saved passwords. It is never written "
+                         "to the config file on disk.")
+            sec_color = "green"
+        else:
+            sec_text  = ("⚠  keyring not installed. Secret will be stored in plain text. "
+                         "Run: pip install keyring")
+            sec_color = "orange"
+        ttk.Label(frm, text=sec_text, wraplength=440, foreground=sec_color,
+                  font=("", 8)).grid(row=2, column=0, columnspan=2, padx=6, pady=(2, 10), sticky="w")
+
+        def save_and_close():
+            self.cfg["client_id"] = cid_var.get().strip()
+            save_config(self.cfg)
+            secret = csec_var.get().strip()
+            if secret and not all(c == "*" for c in secret):
+                store_secret(secret)
+            dialog.destroy()
+            messagebox.showinfo("Saved",
+                "Credentials saved.\n\nClient ID → config file\nClient Secret → Windows Credential Manager")
+
+        btns = ttk.Frame(frm)
+        btns.grid(row=3, column=0, columnspan=2, pady=(4, 0))
+        ttk.Button(btns, text="Save", command=save_and_close, width=12).pack(side=tk.LEFT, padx=6)
+        ttk.Button(btns, text="Cancel", command=dialog.destroy, width=12).pack(side=tk.LEFT, padx=6)
+
+        cid_entry.focus()
+        self._center_on_root(dialog)
+
+    def _show_about(self):
+        dialog = tk.Toplevel(self.root)
+        dialog.title("About TwitchWatcher")
+        dialog.resizable(False, False)
+        dialog.grab_set()
+
+        frm = ttk.Frame(dialog, padding=18)
+        frm.pack(fill=tk.BOTH, expand=True)
+        ttk.Label(frm, text="TwitchWatcher", font=("", 14, "bold")).pack()
+        ttk.Label(frm, text=f"Version {APP_VERSION}").pack(pady=(2, 10))
+        ttk.Label(frm, text="Auto-launch your favorite streams and keep an eye on drops.",
+                  wraplength=320, justify="center").pack(pady=(0, 12))
+
+        btns = ttk.Frame(frm)
+        btns.pack()
+        ttk.Button(btns, text="GitHub", width=12,
+                   command=lambda: webbrowser.open(f"https://github.com/{GITHUB_REPO}")).pack(side=tk.LEFT, padx=6)
+        # Ko-fi: add a support button here when you have a page, e.g.
+        #   ttk.Button(btns, text="Ko-fi ☕", command=lambda: webbrowser.open("https://ko-fi.com/<you>"))
+        ttk.Button(btns, text="Close", width=12, command=dialog.destroy).pack(side=tk.LEFT, padx=6)
+        self._center_on_root(dialog)
+
+    def _center_on_root(self, dialog):
+        """Center a Toplevel over the main window."""
+        dialog.update_idletasks()
+        x = self.root.winfo_rootx() + (self.root.winfo_width()  // 2) - (dialog.winfo_width()  // 2)
+        y = self.root.winfo_rooty() + (self.root.winfo_height() // 2) - (dialog.winfo_height() // 2)
+        dialog.geometry(f"+{max(x, 0)}+{max(y, 0)}")
 
     def _clear_secret(self):
         if messagebox.askyesno("Clear Secret",
                 "Remove the stored Client Secret from Windows Credential Manager?"):
             delete_secret()
-            self.csec_var.set("")
             messagebox.showinfo("Cleared", "Client Secret removed from Windows Credential Manager.")
 
     def _create_shortcut(self):
@@ -934,8 +996,8 @@ class TwitchWatcherApp:
 
         def on_yes():
             dialog.destroy()
-            # Jump straight to Settings tab so they can enter credentials
-            self.notebook.select(self.tab_settings)
+            # Open the credentials dialog so they can enter their keys
+            self._open_credentials_dialog()
 
         def on_no():
             dialog.destroy()
