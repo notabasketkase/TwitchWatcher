@@ -5,6 +5,7 @@ watch/poll loop. Kept as one class for now; can be split per-tab later.
 
 import os
 import sys
+import re
 import time
 import threading
 import webbrowser
@@ -207,9 +208,11 @@ class TwitchWatcherApp:
             pass
         if theme == "light":
             return {"bg": "#fafafa", "field": "#ffffff", "fg": "#1a1a1a",
-                    "muted": "#6b6b6b", "sel": "#cfe2ff"}
+                    "muted": "#6b6b6b", "sel": "#cfe2ff",
+                    "live": "#1a7f37", "drops": "#9a6700", "error": "#cf222e"}
         return {"bg": "#1c1c1c", "field": "#2b2b2b", "fg": "#fafafa",
-                "muted": "#9aa0a6", "sel": "#3a3a3a"}
+                "muted": "#9aa0a6", "sel": "#3a3a3a",
+                "live": "#3fb950", "drops": "#e3b341", "error": "#f85149"}
 
     def _apply_tk_theme(self):
         """Color the raw tk widgets (Text / Listbox / Canvas) that sv_ttk can't
@@ -223,6 +226,15 @@ class TwitchWatcherApp:
             self.log_box.configure(bg=p["field"], fg=p["fg"], insertbackground=p["fg"],
                                    selectbackground=p["sel"], selectforeground=p["fg"],
                                    highlightthickness=0, borderwidth=0)
+            # Log color-coding (Phase 5) — reconfigured here so it re-themes on
+            # a light/dark switch, and existing lines recolor retroactively.
+            self.log_box.tag_configure("time",    foreground=p["muted"])
+            self.log_box.tag_configure("divider", foreground=p["muted"])
+            self.log_box.tag_configure("live",    foreground=p["live"])
+            self.log_box.tag_configure("offline", foreground=p["muted"])
+            self.log_box.tag_configure("drops",   foreground=p["drops"])
+            self.log_box.tag_configure("error",   foreground=p["error"])
+            self.log_box.tag_configure("default", foreground=p["fg"])
         except Exception:
             pass
         try:
@@ -889,6 +901,20 @@ class TwitchWatcherApp:
         # Persist what we've reacted to so a restart resumes where we left off.
         save_state(self.opened, self.drops_pending, self.drops_game_alerted)
 
+    def _log_kind(self, msg):
+        """Pick a color tag for a log line from its content (priority: error →
+        drops → offline → live → default)."""
+        m = msg.lower()
+        if "error" in m or "failed" in m:
+            return "error"
+        if "drops" in m or "🎁" in msg:
+            return "drops"
+        if "offline" in m:
+            return "offline"
+        if "live" in m or "opening browser" in m or "watcher started" in m:
+            return "live"
+        return "default"
+
     def _log(self, msg):
         def _do():
             self.log_box.config(state=tk.NORMAL)
@@ -897,8 +923,16 @@ class TwitchWatcherApp:
             today = time.strftime("%b %d, %Y")
             if today != self._last_log_date:
                 self._last_log_date = today
-                self.log_box.insert(tk.END, f"——— {today} ———\n")
-            self.log_box.insert(tk.END, msg + "\n")
+                self.log_box.insert(tk.END, f"——— {today} ———\n", "divider")
+            # Split a leading "[HH:MM:SS] " timestamp so it can be muted, and
+            # color the rest by kind.
+            tag = self._log_kind(msg)
+            m = re.match(r"^(\[\d{2}:\d{2}:\d{2}\] )(.*)$", msg, re.S)
+            if m:
+                self.log_box.insert(tk.END, m.group(1), "time")
+                self.log_box.insert(tk.END, m.group(2) + "\n", tag)
+            else:
+                self.log_box.insert(tk.END, msg + "\n", tag)
             self.log_box.see(tk.END)
             self.log_box.config(state=tk.DISABLED)
         self.root.after(0, _do)
