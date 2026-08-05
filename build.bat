@@ -20,6 +20,7 @@ python -m PyInstaller --noconfirm --clean --onefile --windowed ^
   --hidden-import plyer.platforms.win.notification ^
   --hidden-import keyring.backends.Windows ^
   --hidden-import pystray._win32 ^
+  --collect-all sv_ttk ^
   "twitch_live_watch.py"
 
 echo.
