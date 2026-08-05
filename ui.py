@@ -60,6 +60,7 @@ class TwitchWatcherApp:
         self._tray_hint_shown    = False
         self._last_log_date      = ""
 
+        self._pal = self._palette()
         self._build_ui()
         self._populate_settings()
         self._populate_streamers()
@@ -119,6 +120,45 @@ class TwitchWatcherApp:
         self.toggle_btn = ttk.Button(bar, text="▶  Start Watching", command=self._toggle_watch)
         self.toggle_btn.pack(side=tk.RIGHT)
 
+        self._apply_tk_theme()
+
+    def _palette(self):
+        """Theme-aware colors for the raw tk widgets and the previously
+        hardcoded label colors. Keyed off the active sv_ttk theme, so this also
+        serves the light/dark toggle coming in a later phase."""
+        theme = "dark"
+        try:
+            import sv_ttk
+            theme = sv_ttk.get_theme()
+        except Exception:
+            pass
+        if theme == "light":
+            return {"bg": "#fafafa", "field": "#ffffff", "fg": "#1a1a1a",
+                    "muted": "#6b6b6b", "sel": "#cfe2ff"}
+        return {"bg": "#1c1c1c", "field": "#2b2b2b", "fg": "#fafafa",
+                "muted": "#9aa0a6", "sel": "#3a3a3a"}
+
+    def _apply_tk_theme(self):
+        """Color the raw tk widgets (Text / Listbox / Canvas) that sv_ttk can't
+        style, so the theme is consistent everywhere."""
+        p = self._pal = self._palette()
+        try:
+            self.live_canvas.configure(bg=p["bg"])
+        except Exception:
+            pass
+        try:
+            self.log_box.configure(bg=p["field"], fg=p["fg"], insertbackground=p["fg"],
+                                   selectbackground=p["sel"], selectforeground=p["fg"],
+                                   highlightthickness=0, borderwidth=0)
+        except Exception:
+            pass
+        try:
+            self.games_listbox.configure(bg=p["field"], fg=p["fg"],
+                                         selectbackground=p["sel"], selectforeground=p["fg"],
+                                         highlightthickness=0, borderwidth=0)
+        except Exception:
+            pass
+
     # -------------------------------------------------------------------------
     # Live tab
     # -------------------------------------------------------------------------
@@ -130,6 +170,7 @@ class TwitchWatcherApp:
         container = ttk.Frame(self.tab_live)
         container.pack(fill=tk.BOTH, expand=True, padx=8, pady=2)
         canvas = tk.Canvas(container, highlightthickness=0)
+        self.live_canvas = canvas
         sb = ttk.Scrollbar(container, orient="vertical", command=canvas.yview)
         self.live_frame = ttk.Frame(canvas)
         self.live_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
@@ -158,7 +199,7 @@ class TwitchWatcherApp:
 
         streamers = self.cfg.get("streamers", [])
         if not streamers:
-            ttk.Label(self.live_frame, text="No streamers added yet.", foreground="gray").grid(
+            ttk.Label(self.live_frame, text="No streamers added yet.", foreground=self._pal["muted"]).grid(
                 row=0, column=0, padx=8, pady=8)
             return
 
@@ -184,7 +225,7 @@ class TwitchWatcherApp:
                 row=current_row, column=0, columnspan=6, sticky="ew", pady=(6, 0))
             current_row += 1
             ttk.Label(self.live_frame, text=f"  {group}",
-                      font=("", 8, "bold"), foreground="#666666").grid(
+                      font=("", 8, "bold"), foreground=self._pal["muted"]).grid(
                 row=current_row, column=0, columnspan=6, sticky="w", padx=4, pady=(0, 2))
             current_row += 1
 
@@ -218,7 +259,7 @@ class TwitchWatcherApp:
             w["title"].config(text=(info["title"] or "—")[:38])
             w["viewers"].config(text=f'{info["viewers"]:,}')
         else:
-            w["status"].config(text="⚫ offline", foreground="gray")
+            w["status"].config(text="⚫ offline", foreground=self._pal["muted"])
             w["game"].config(text="—")
             w["title"].config(text="—")
             w["viewers"].config(text="—")
@@ -453,7 +494,7 @@ class TwitchWatcherApp:
                   font=("", 8)).grid(row=2, column=0, columnspan=2, padx=6, pady=(2, 4), sticky="w")
 
         config_note = f"ℹ  Streamer list, game list, and poll interval are saved to:\n{CONFIG_FILE}"
-        ttk.Label(f, text=config_note, wraplength=500, foreground="gray",
+        ttk.Label(f, text=config_note, wraplength=500, foreground=self._pal["muted"],
                   font=("", 8)).grid(row=3, column=0, columnspan=2, padx=6, pady=(0, 8), sticky="w")
         ttk.Button(f, text="📄  Open Setup Guide", command=self._open_setup_guide).grid(
             row=4, column=0, columnspan=2, padx=6, pady=(0, 8), sticky="w")
