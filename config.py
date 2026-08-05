@@ -21,6 +21,9 @@ if getattr(sys, "frozen", False):
 else:
     _APP_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE = os.path.join(_APP_DIR, "twitch_watcher_config.json")
+# Runtime state (which streamers we've already opened/notified this run). Kept
+# separate from user config so a restart doesn't re-pop streams already open.
+STATE_FILE = os.path.join(_APP_DIR, "twitch_watcher_state.json")
 
 DEFAULT_CONFIG = {
     "client_id": os.environ.get("TWITCH_CLIENT_ID", ""),
@@ -53,3 +56,36 @@ def save_config(cfg):
     safe = {k: v for k, v in cfg.items() if k != "client_secret"}
     with open(CONFIG_FILE, "w") as f:
         json.dump(safe, f, indent=2)
+
+
+def load_state():
+    """Load the watcher's 'already reacted to' sets (opened / drops_pending /
+    drops_game_alerted) as a dict of lists. Returns empty lists if there's no
+    state file yet or it can't be read."""
+    if os.path.exists(STATE_FILE):
+        try:
+            with open(STATE_FILE, "r") as f:
+                data = json.load(f)
+                return {
+                    "opened":             list(data.get("opened", [])),
+                    "drops_pending":      list(data.get("drops_pending", [])),
+                    "drops_game_alerted": list(data.get("drops_game_alerted", [])),
+                }
+        except Exception:
+            pass
+    return {"opened": [], "drops_pending": [], "drops_game_alerted": []}
+
+
+def save_state(opened, drops_pending, drops_game_alerted):
+    """Persist the watcher's 'already reacted to' sets so a restart doesn't
+    re-open / re-notify streamers that were already handled. Best-effort — a
+    disk error here must never crash the poll loop."""
+    try:
+        with open(STATE_FILE, "w") as f:
+            json.dump({
+                "opened":             sorted(opened),
+                "drops_pending":      sorted(drops_pending),
+                "drops_game_alerted": sorted(drops_game_alerted),
+            }, f, indent=2)
+    except Exception:
+        pass

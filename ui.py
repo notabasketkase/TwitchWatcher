@@ -19,7 +19,8 @@ try:
 except ImportError:
     PYSTRAY_AVAILABLE = False
 
-from config import load_config, save_config, DEFAULT_GROUP, APP_VERSION, GITHUB_REPO, CONFIG_FILE
+from config import (load_config, save_config, load_state, save_state,
+                    DEFAULT_GROUP, APP_VERSION, GITHUB_REPO, CONFIG_FILE)
 from credentials import store_secret, load_secret, delete_secret, get_app_token, KEYRING_AVAILABLE
 from twitch_api import get_live_streams
 from updates import get_latest_release, is_newer_version
@@ -48,6 +49,11 @@ class TwitchWatcherApp:
         self.opened              = set()
         self.drops_pending       = set()  # live but waiting for drops in title
         self.drops_game_alerted  = set()
+        # First successful poll after a (re)start reconciles persisted state
+        # silently — no stale "went offline" alerts for streams that dropped
+        # while the app was closed. True by default so it's a no-op until a
+        # watch session actually starts and sets it False.
+        self._reconciled_after_start = True
         self.watching            = False
         self.status_rows         = {}   # name -> dict of label widgets
         self.tray_icon           = None
@@ -569,9 +575,15 @@ class TwitchWatcherApp:
                 return
             self._rebuild_live_rows()
             self.watching = True
-            self.opened.clear()
-            self.drops_pending.clear()
-            self.drops_game_alerted.clear()
+            # Restore the "already opened / already notified" memory from disk so
+            # a restart doesn't re-pop streams that were already open before it.
+            # (While running, a streamer going offline still clears them from this
+            # set, so a genuine offline→online still reopens as before.)
+            state = load_state()
+            self.opened             = set(state["opened"])
+            self.drops_pending      = set(state["drops_pending"])
+            self.drops_game_alerted = set(state["drops_game_alerted"])
+            self._reconciled_after_start = False
             self.toggle_btn.config(text="⏹  Stop Watching")
             self.status_var.set("Starting…")
             self._log("Watcher started.")
@@ -676,8 +688,12 @@ class TwitchWatcherApp:
                 self.opened.add(name)
 
         for name in (self.opened | self.drops_pending) - live_now:
-            self._log(f"[{ts}] {name} went offline.")
-            notify(f"{name} went offline", "Stream has ended.")
+            # On the first poll after a (re)start we're just reconciling restored
+            # state — a streamer that dropped while we were closed shouldn't fire
+            # a stale "went offline" alert. Clear them quietly instead.
+            if self._reconciled_after_start:
+                self._log(f"[{ts}] {name} went offline.")
+                notify(f"{name} went offline", "Stream has ended.")
             self.opened.discard(name)
             self.drops_pending.discard(name)
             self.drops_game_alerted.discard(name)
@@ -693,6 +709,12 @@ class TwitchWatcherApp:
 
         live_str = f"Live: {', '.join(sorted(live_now))}" if live_now else "All offline"
         self.root.after(0, self.status_var.set, f"{live_str} — last checked {ts}")
+
+        # This poll completed a full pass, so any future offline transitions are
+        # real (not restored-state reconciliation) and should alert normally.
+        self._reconciled_after_start = True
+        # Persist what we've reacted to so a restart resumes where we left off.
+        save_state(self.opened, self.drops_pending, self.drops_game_alerted)
 
     def _log(self, msg):
         def _do():
