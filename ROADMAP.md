@@ -111,6 +111,22 @@ rushing. (v0.3.x is shipped; start the rehaul as its own focused effort once it'
 - 🔬 **Spike first:** try sv_ttk vs CustomTkinter on a throwaway copy to feel the look before committing.
 - Becomes **v1.0** when it's polished and proven — no deadline.
 
+**Progress (2026-08-05) — all 5 phases DONE on the `ui-rehaul` branch (spike-first, sv_ttk chosen):**
+- ✅ Phase 1 — sv_ttk dark theme foundation
+- ✅ Phase 2 — theme-aware raw tk widgets + palette (kills the hardcoded grays / white boxes)
+- ✅ Phase 3 — Dark/Light/System toggle (System reads the Windows theme; applied pre-draw, no flash)
+- ✅ Phase 4 — Settings reorg: File·Settings·Help menu bar, credentials → modal dialog, new Preferences tab
+- ✅ Phase 5 — color-coded log (green live · gold drops · gray offline · red errors · muted timestamps)
+
+**Still TODO before v1.0 actually ships (branch is source-only, not yet packaged):**
+1. **Package sv_ttk into the exe** — PyInstaller won't auto-bundle sv_ttk's theme `.tcl` files;
+   `build.bat` needs `--collect-all sv_ttk` (or `--collect-data sv_ttk`). Build + RUN the exe to confirm
+   the theme loads when frozen. **This is the gating task — the branch has not been built/tested as an exe yet.**
+2. **Bump `APP_VERSION` → `1.0.0`** (About dialog + title + update-check all read it).
+3. Optional polish (roadmap items): per-streamer Drops badge on live rows, live-sort (online-above-offline),
+   status strip, spacing. Can ship 1.0 without these or fold some in.
+4. **Merge `ui-rehaul` → `main`** once built, tested, and proven; then cut the v1.0.0 release.
+
 ---
 
 ## 🎯 v0.3.0 — Candidates (next up)
