@@ -56,6 +56,9 @@ class TwitchWatcherApp:
         # watch session actually starts and sets it False.
         self._reconciled_after_start = True
         self.watching            = False
+        # Set to wake the watch loop early — for an immediate poll after a
+        # streamer is added/removed, and for an instant Stop.
+        self._poll_now           = threading.Event()
         self.status_rows         = {}   # name -> dict of label widgets
         self.tray_icon           = None
         self._tray_hint_shown    = False
@@ -469,6 +472,7 @@ class TwitchWatcherApp:
         self.auto_open_var.set(True)
         self._populate_streamers()
         self._rebuild_live_rows()
+        self._poll_soon()  # fill in the new streamer's status right away
 
     def _remove_streamer(self):
         sel = self.streamer_tree.selection()
@@ -479,6 +483,7 @@ class TwitchWatcherApp:
         save_config(self.cfg)
         self._populate_streamers()
         self._rebuild_live_rows()
+        self._poll_soon()
 
     def _toggle_drops_only(self):
         sel = self.streamer_tree.selection()
@@ -774,6 +779,7 @@ class TwitchWatcherApp:
     def _toggle_watch(self):
         if self.watching:
             self.watching = False
+            self._poll_now.set()  # wake the loop so it stops right away
             self.toggle_btn.config(text="▶  Start Watching")
             self.status_var.set("Stopped.")
             self._log("Watcher stopped.")
@@ -803,6 +809,12 @@ class TwitchWatcherApp:
             self._log("Watcher started.")
             threading.Thread(target=self._poll_loop, daemon=True).start()
 
+    def _poll_soon(self):
+        """Ask the watch loop to poll right now instead of waiting out the
+        interval (used after a streamer is added/removed while watching)."""
+        if self.watching:
+            self._poll_now.set()
+
     def _poll_loop(self):
         client_id = self.cfg["client_id"]
         self.token = None
@@ -830,10 +842,10 @@ class TwitchWatcherApp:
             # Poll at the normal interval once connected; while we still can't
             # get a token, retry quickly (every 15s) so recovery is prompt.
             interval = self.cfg.get("poll_interval", 300) if self.token is not None else 15
-            for _ in range(int(interval * 2)):
-                if not self.watching:
-                    break
-                time.sleep(0.5)
+            # Wait out the interval, but wake immediately if asked to poll now
+            # (streamer added/removed) or to stop.
+            self._poll_now.wait(timeout=interval)
+            self._poll_now.clear()
 
     def _do_poll(self, client_id):
         usernames       = [s["name"].lower() for s in self.cfg.get("streamers", [])]
