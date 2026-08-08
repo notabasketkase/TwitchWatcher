@@ -255,6 +255,15 @@ as older than 0.3.0; fixed by renaming the tag to `v0.3.1`.)*
 ---
 
 ## 💡 Backlog / Someday
+- 🟠 **Customizable Live Status columns (reorder + hide)** — let each user arrange the Live Status
+  table how they like: drag to reorder columns, hide ones they don't care about, per-user saved in
+  config. Came up 2026-08-08 while deciding where to move the **Open** button (community couldn't
+  agree — so "let everyone choose" is the better answer than picking one). **Architectural lift, not
+  a quick polish:** the table today is hand-built rows (grid of ttk Labels) with a real clickable
+  **Open button embedded in each row**. Native column-drag wants a `ttk.Treeview`, which can't host
+  buttons in cells — so Open would have to become row double-click / right-click, or we build a custom
+  reorderable grid. A v1.x/v2 feature. **Interim (v1-sized) option:** a simple "Open button position"
+  preference (Before name / After status / At end) delivers most of the value cheaply if wanted sooner.
 - 🔴🔒 **Import your followed channels from Twitch** — log in with your Twitch account, pull your
   follow list (Helix "Get Followed Channels" + the `user:read:follows` scope), and tick which ones
   to watch / auto-open instead of typing usernames. Wanted by wyntrblue — genuinely cool, likely a
