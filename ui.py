@@ -327,8 +327,9 @@ class TwitchWatcherApp:
             if g not in seen_groups:
                 seen_groups.append(g)
 
-        # Column headers
-        for col, h in enumerate(["Streamer", "Status", "Game", "Title", "Viewers", ""]):
+        # Column headers. Row order: [Open] · status dot · Streamer · Game · Title · Viewers
+        # (community pick 2026-08-09; dot-for-status is Dante's idea).
+        for col, h in enumerate(["", "", "Streamer", "Game", "Title", "Viewers"]):
             ttk.Label(self.live_frame, text=h, font=("", 8, "bold")).grid(
                 row=0, column=col, padx=6, pady=2, sticky="w")
 
@@ -350,21 +351,24 @@ class TwitchWatcherApp:
             for s in group_streamers:
                 name = s["name"].lower()
                 nl = ttk.Label(self.live_frame, text=name, width=16)
-                sl = ttk.Label(self.live_frame, text="—", width=9)
+                sl = ttk.Label(self.live_frame, text="●", width=3, font=("", 12),
+                               foreground=self._pal["muted"])
                 gl = ttk.Label(self.live_frame, text="—", width=18)
                 tl = ttk.Label(self.live_frame, text="—", width=28)
                 vl = ttk.Label(self.live_frame, text="—", width=8)
                 ob = ttk.Button(self.live_frame, text="Open", width=5,
                                 command=lambda n=name: webbrowser.open(f"https://twitch.tv/{n}"))
 
-                nl.grid(row=current_row, column=0, padx=6, pady=1, sticky="w")
-                sl.grid(row=current_row, column=1, padx=6, pady=1, sticky="w")
-                gl.grid(row=current_row, column=2, padx=6, pady=1, sticky="w")
-                tl.grid(row=current_row, column=3, padx=6, pady=1, sticky="w")
-                vl.grid(row=current_row, column=4, padx=6, pady=1, sticky="w")
-                ob.grid(row=current_row, column=5, padx=6, pady=1)
+                ob.grid(row=current_row, column=0, padx=6, pady=1)
+                sl.grid(row=current_row, column=1, padx=(6, 2), pady=1)
+                nl.grid(row=current_row, column=2, padx=6, pady=1, sticky="w")
+                gl.grid(row=current_row, column=3, padx=6, pady=1, sticky="w")
+                tl.grid(row=current_row, column=4, padx=6, pady=1, sticky="w")
+                vl.grid(row=current_row, column=5, padx=6, pady=1, sticky="w")
 
                 self.status_rows[name] = {"name": nl, "status": sl, "game": gl, "title": tl, "viewers": vl}
+                self._attach_tooltip(
+                    sl, lambda n=name: "Live" if self.status_rows.get(n, {}).get("live") else "Offline")
                 current_row += 1
 
     def _update_live_row(self, name, info=None):
@@ -372,17 +376,48 @@ class TwitchWatcherApp:
             return
         w = self.status_rows[name]
         if info:
+            w["live"] = True
             w["name"].config(foreground=self._pal["live"])
-            w["status"].config(text="🟢 LIVE", foreground=self._pal["live"])
+            w["status"].config(text="●", foreground=self._pal["live"])
             w["game"].config(text=(info["game"] or "—")[:22])
             w["title"].config(text=(info["title"] or "—")[:38])
             w["viewers"].config(text=f'{info["viewers"]:,}')
         else:
+            w["live"] = False
             w["name"].config(foreground=self._pal["muted"])
-            w["status"].config(text="⚫ offline", foreground=self._pal["muted"])
+            w["status"].config(text="●", foreground=self._pal["muted"])
             w["game"].config(text="—")
             w["title"].config(text="—")
             w["viewers"].config(text="—")
+
+    def _attach_tooltip(self, widget, text_getter):
+        """Lightweight hover tooltip. text_getter() returns the current text
+        (so the status dot can report Live/Offline as it changes)."""
+        state = {"win": None}
+
+        def show(_e=None):
+            if state["win"] is not None:
+                return
+            text = text_getter()
+            if not text:
+                return
+            x = widget.winfo_rootx() + 24
+            y = widget.winfo_rooty() + widget.winfo_height() + 2
+            win = tk.Toplevel(widget)
+            win.wm_overrideredirect(True)
+            win.wm_geometry(f"+{x}+{y}")
+            tk.Label(win, text=text, background=self._pal["field"], foreground=self._pal["fg"],
+                     relief="solid", borderwidth=1, font=("", 8), padx=6, pady=2).pack()
+            state["win"] = win
+
+        def hide(_e=None):
+            if state["win"] is not None:
+                state["win"].destroy()
+                state["win"] = None
+
+        widget.bind("<Enter>", show)
+        widget.bind("<Leave>", hide)
+        widget.bind("<Destroy>", lambda _e: hide())
 
     # -------------------------------------------------------------------------
     # Streamers tab
