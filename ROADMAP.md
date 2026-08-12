@@ -297,7 +297,11 @@ as older than 0.3.0; fixed by renaming the tag to `v0.3.1`.)*
     refused to start** — breaking both the shortcut and auto-start. Fix: switch the lock to a named
     mutex and make the guard **fail open** (any uncertainty → run the app). Lesson: a single-instance
     guard must never be able to prevent the app from launching.
-- 🟡 **Per-streamer mode picker (fix the Auto-Open × Drops-Only confusion)** — the two checkboxes
+- ✅ **Per-streamer mode picker (fix the Auto-Open × Drops-Only confusion)** — DONE 2026-08-11 on
+  `ui-rehaul` (all 4 modes: Open when live / Open on Drops / Notify only / Notify on Drops; single Mode
+  column + "Edit Streamer" dialog with live hint; Mode is a lossless UI front-end over the existing
+  auto_open/drops_only flags). Original spec below:
+- 🟡 ~~**Per-streamer mode picker (fix the Auto-Open × Drops-Only confusion)**~~ — the two checkboxes
   interact non-obviously: `auto_open` = open vs notify-only; `drops_only` = trigger only on drops. So
   **"Auto-Open OFF + Drops-Only ON" = "never open, even on drops"** — which surprised a user who read
   it as "open only on drops" (that combo is actually Drops-Only ON + Auto-Open ON). Fix: replace the
