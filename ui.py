@@ -47,6 +47,16 @@ MODE_HELP = {
 }
 
 
+# How the Live Status table is ordered (friendly name -> stored key).
+LIVE_SORT_MODES = {
+    "Live now section":     "section",  # live pinned in a section on top, offline grouped below
+    "Live first in groups": "group",    # groups kept, live rises within each group
+    "Grouped":              "grouped",  # original: fixed config order, grouped, no live-sorting
+    "Flat (live on top)":   "flat",     # one list, no group headers, live above offline
+}
+_LIVE_SORT_LABEL = {v: k for k, v in LIVE_SORT_MODES.items()}
+
+
 def mode_of(s):
     """The friendly Mode name for a streamer dict (from its auto_open/drops_only)."""
     flags = (s.get("auto_open", True), s.get("drops_only", False))
@@ -92,6 +102,8 @@ class TwitchWatcherApp:
         # streamer is added/removed, and for an instant Stop.
         self._poll_now           = threading.Event()
         self.status_rows         = {}   # name -> dict of label widgets
+        self._live_info          = {}   # name -> live info dict (or None) from the last poll
+        self._rendered_live_set  = None # names currently shown in the "Live now" section
         self.tray_icon           = None
         self._tray_hint_shown    = False
         self._last_log_date      = ""
@@ -237,6 +249,18 @@ class TwitchWatcherApp:
         """Appearance radio buttons → persist + apply the new theme live."""
         self._set_theme(self.theme_var.get())
 
+    def _on_show_dot_change(self):
+        """Toggle the per-row live/offline dot; persist + redraw the table."""
+        self.cfg["show_status_dot"] = self.show_dot_var.get()
+        save_config(self.cfg)
+        self._rebuild_live_rows()
+
+    def _on_sort_change(self):
+        """Change how Live Status is ordered; persist + redraw the table."""
+        self.cfg["live_sort"] = LIVE_SORT_MODES.get(self.sort_var.get(), "section")
+        save_config(self.cfg)
+        self._rebuild_live_rows()
+
     def _set_theme(self, choice):
         """Persist the theme choice and apply it immediately across the app."""
         self.cfg["theme"] = choice
@@ -337,8 +361,10 @@ class TwitchWatcherApp:
 
     def _rebuild_live_rows(self):
         """
-        Build the Live Status table grouped by the streamer's group field.
-        Each group gets a header row, then its streamers underneath.
+        Build the Live Status table: a pinned "🔴 Live now" section on top (all
+        currently-live streamers, most viewers first), then everyone else grouped
+        by their group field. Re-runs when the live set changes, so live streamers
+        always float to the top.
         """
         for w in self.live_frame.winfo_children():
             w.destroy()
@@ -350,58 +376,110 @@ class TwitchWatcherApp:
             nl = ttk.Label(self.live_frame, text="No streamers added yet.", foreground=self._pal["muted"])
             nl.grid(row=0, column=0, padx=8, pady=8)
             self._live_muted_labels.append(nl)
+            self._rendered_live_set = frozenset()
             return
 
-        # Collect unique groups in the order they first appear
-        seen_groups = []
-        for s in streamers:
-            g = s.get("group", DEFAULT_GROUP) or DEFAULT_GROUP
-            if g not in seen_groups:
-                seen_groups.append(g)
-
-        # Column headers. Row order: [Open] · status dot · Streamer · Game · Title · Viewers
-        # (community pick 2026-08-09; dot-for-status is Dante's idea).
-        for col, h in enumerate(["", "", "Streamer", "Game", "Title", "Viewers"]):
+        # Optional status dot (Dante's idea). With the Live-now section it's
+        # redundant, so it's a per-user toggle. Row order:
+        #   [Open] · (dot) · Streamer · Game · Title · Viewers
+        show_dot = self.cfg.get("show_status_dot", True)
+        headers = (["", "", "Streamer", "Game", "Title", "Viewers"] if show_dot
+                   else ["", "Streamer", "Game", "Title", "Viewers"])
+        span = len(headers)
+        for col, h in enumerate(headers):
             ttk.Label(self.live_frame, text=h, font=("", 8, "bold")).grid(
                 row=0, column=col, padx=6, pady=2, sticky="w")
 
-        current_row = 1
-        for group in seen_groups:
-            group_streamers = [s for s in streamers
-                               if (s.get("group", DEFAULT_GROUP) or DEFAULT_GROUP) == group]
+        self._row_cursor = 1
 
-            # Group header separator
+        def section_header(text, color):
             ttk.Separator(self.live_frame, orient="horizontal").grid(
-                row=current_row, column=0, columnspan=6, sticky="ew", pady=(6, 0))
-            current_row += 1
-            gh = ttk.Label(self.live_frame, text=f"  {group}",
-                           font=("", 8, "bold"), foreground=self._pal["muted"])
-            gh.grid(row=current_row, column=0, columnspan=6, sticky="w", padx=4, pady=(0, 2))
-            self._live_muted_labels.append(gh)
-            current_row += 1
+                row=self._row_cursor, column=0, columnspan=span, sticky="ew", pady=(6, 0))
+            self._row_cursor += 1
+            lbl = ttk.Label(self.live_frame, text=text, font=("", 8, "bold"), foreground=color)
+            lbl.grid(row=self._row_cursor, column=0, columnspan=span, sticky="w", padx=4, pady=(0, 2))
+            self._row_cursor += 1
+            return lbl
 
-            for s in group_streamers:
-                name = s["name"].lower()
-                nl = ttk.Label(self.live_frame, text=name, width=16)
+        def place_row(s):
+            name = s["name"].lower()
+            nl = ttk.Label(self.live_frame, text=name, width=16)
+            gl = ttk.Label(self.live_frame, text="—", width=18)
+            tl = ttk.Label(self.live_frame, text="—", width=28)
+            vl = ttk.Label(self.live_frame, text="—", width=8)
+            ob = ttk.Button(self.live_frame, text="Open", width=5,
+                            command=lambda n=name: webbrowser.open(f"https://twitch.tv/{n}"))
+            r, c = self._row_cursor, 0
+            ob.grid(row=r, column=c, padx=6, pady=1); c += 1
+            row = {"name": nl, "game": gl, "title": tl, "viewers": vl}
+            if show_dot:
                 sl = ttk.Label(self.live_frame, text="●", width=3, font=("", 12),
                                foreground=self._pal["muted"])
-                gl = ttk.Label(self.live_frame, text="—", width=18)
-                tl = ttk.Label(self.live_frame, text="—", width=28)
-                vl = ttk.Label(self.live_frame, text="—", width=8)
-                ob = ttk.Button(self.live_frame, text="Open", width=5,
-                                command=lambda n=name: webbrowser.open(f"https://twitch.tv/{n}"))
-
-                ob.grid(row=current_row, column=0, padx=6, pady=1)
-                sl.grid(row=current_row, column=1, padx=(6, 2), pady=1)
-                nl.grid(row=current_row, column=2, padx=6, pady=1, sticky="w")
-                gl.grid(row=current_row, column=3, padx=6, pady=1, sticky="w")
-                tl.grid(row=current_row, column=4, padx=6, pady=1, sticky="w")
-                vl.grid(row=current_row, column=5, padx=6, pady=1, sticky="w")
-
-                self.status_rows[name] = {"name": nl, "status": sl, "game": gl, "title": tl, "viewers": vl}
+                sl.grid(row=r, column=c, padx=(6, 2), pady=1); c += 1
+                row["status"] = sl
                 self._attach_tooltip(
                     sl, lambda n=name: "Live" if self.status_rows.get(n, {}).get("live") else "Offline")
-                current_row += 1
+            nl.grid(row=r, column=c, padx=6, pady=1, sticky="w"); c += 1
+            gl.grid(row=r, column=c, padx=6, pady=1, sticky="w"); c += 1
+            tl.grid(row=r, column=c, padx=6, pady=1, sticky="w"); c += 1
+            vl.grid(row=r, column=c, padx=6, pady=1, sticky="w"); c += 1
+            self.status_rows[name] = row
+            self._update_live_row(name, self._live_info.get(name))  # paint current state
+            self._row_cursor += 1
+
+        def group_of(s):
+            return s.get("group", DEFAULT_GROUP) or DEFAULT_GROUP
+
+        def ordered_groups(items):
+            seen = []
+            for s in items:
+                g = group_of(s)
+                if g not in seen:
+                    seen.append(g)
+            return seen
+
+        def is_live(s):
+            return bool(self._live_info.get(s["name"].lower()))
+
+        def by_viewers(s):
+            return -((self._live_info.get(s["name"].lower()) or {}).get("viewers", 0))
+
+        def grouped_block(members):
+            for group in ordered_groups(members):
+                gm = [s for s in members if group_of(s) == group]
+                if not gm:
+                    continue
+                self._live_muted_labels.append(section_header(f"  {group}", self._pal["muted"]))
+                for s in gm:
+                    place_row(s)
+
+        mode = self.cfg.get("live_sort", "section")
+        if mode == "flat":
+            # One list, no group headers: live (most viewers first) then offline.
+            for s in sorted([x for x in streamers if is_live(x)], key=by_viewers) + \
+                     [x for x in streamers if not is_live(x)]:
+                place_row(s)
+        elif mode == "grouped":
+            # Original: groups in config order, no live-sorting.
+            grouped_block(streamers)
+        elif mode == "group":
+            # Groups kept, but live rises to the top within each group.
+            for group in ordered_groups(streamers):
+                gm = [s for s in streamers if group_of(s) == group]
+                gm = sorted([s for s in gm if is_live(s)], key=by_viewers) + \
+                     [s for s in gm if not is_live(s)]
+                self._live_muted_labels.append(section_header(f"  {group}", self._pal["muted"]))
+                for s in gm:
+                    place_row(s)
+        else:  # "section" — pinned "Live now" on top, everyone else grouped below
+            live = sorted([s for s in streamers if is_live(s)], key=by_viewers)
+            if live:
+                section_header("🔴  Live now", self._pal["live"])
+                for s in live:
+                    place_row(s)
+            grouped_block([s for s in streamers if not is_live(s)])
+
+        self._rendered_live_set = frozenset(s["name"].lower() for s in streamers if is_live(s))
 
     def _update_live_row(self, name, info=None):
         if name not in self.status_rows:
@@ -410,17 +488,32 @@ class TwitchWatcherApp:
         if info:
             w["live"] = True
             w["name"].config(foreground=self._pal["live"])
-            w["status"].config(text="●", foreground=self._pal["live"])
+            if "status" in w:
+                w["status"].config(text="●", foreground=self._pal["live"])
             w["game"].config(text=(info["game"] or "—")[:22])
             w["title"].config(text=(info["title"] or "—")[:38])
             w["viewers"].config(text=f'{info["viewers"]:,}')
         else:
             w["live"] = False
             w["name"].config(foreground=self._pal["muted"])
-            w["status"].config(text="●", foreground=self._pal["muted"])
+            if "status" in w:
+                w["status"].config(text="●", foreground=self._pal["muted"])
             w["game"].config(text="—")
             w["title"].config(text="—")
             w["viewers"].config(text="—")
+
+    def _refresh_live_display(self):
+        """Called after each poll (on the UI thread). For live-aware sort modes,
+        reflow the table when the live set changes; otherwise (and for the fixed
+        "grouped" mode) just refresh each row's details in place."""
+        live_now = frozenset(n for n, info in self._live_info.items() if info)
+        reflows = self.cfg.get("live_sort", "section") != "grouped"
+        if reflows and live_now != self._rendered_live_set:
+            self._rebuild_live_rows()
+        else:
+            for name, info in self._live_info.items():
+                if name in self.status_rows:
+                    self._update_live_row(name, info)
 
     def _attach_tooltip(self, widget, text_getter):
         """Lightweight hover tooltip. text_getter() returns the current text
@@ -668,6 +761,19 @@ class TwitchWatcherApp:
             ttk.Radiobutton(f3, text=label, value=val, variable=self.theme_var,
                             command=self._on_theme_change).grid(row=0, column=1 + i, padx=6, pady=6, sticky="w")
 
+        self.show_dot_var = tk.BooleanVar(value=self.cfg.get("show_status_dot", True))
+        ttk.Checkbutton(f3, text="Show a live/offline dot on each Live Status row",
+                        variable=self.show_dot_var, command=self._on_show_dot_change).grid(
+            row=1, column=0, columnspan=4, sticky="w", padx=6, pady=(0, 6))
+
+        ttk.Label(f3, text="Live Status sort:").grid(row=2, column=0, sticky="w", padx=6, pady=(0, 8))
+        self.sort_var = tk.StringVar(
+            value=_LIVE_SORT_LABEL.get(self.cfg.get("live_sort", "section"), "Live now section"))
+        sort_cb = ttk.Combobox(f3, textvariable=self.sort_var, values=list(LIVE_SORT_MODES),
+                               state="readonly", width=20)
+        sort_cb.grid(row=2, column=1, columnspan=3, sticky="w", padx=6, pady=(0, 8))
+        sort_cb.bind("<<ComboboxSelected>>", lambda _e: self._on_sort_change())
+
         btn_row = ttk.Frame(self.tab_prefs)
         btn_row.pack(fill=tk.X, padx=12, pady=10)
         ttk.Button(btn_row, text="Save Preferences", command=self._save_preferences).pack(side=tk.LEFT)
@@ -689,6 +795,8 @@ class TwitchWatcherApp:
         self.autostart_var.set(self.cfg.get("autostart", False))
         self.run_on_startup_var.set(is_run_on_startup())
         self.theme_var.set(self.cfg.get("theme", "dark"))
+        self.show_dot_var.set(self.cfg.get("show_status_dot", True))
+        self.sort_var.set(_LIVE_SORT_LABEL.get(self.cfg.get("live_sort", "section"), "Live now section"))
 
     def _save_preferences(self):
         self.cfg["poll_interval"] = self.interval_var.get()
@@ -932,9 +1040,11 @@ class TwitchWatcherApp:
         ts       = time.strftime("%H:%M:%S")
         live_now = set(live_streams.keys())
 
-        for s in self.cfg.get("streamers", []):
-            name = s["name"].lower()
-            self.root.after(0, self._update_live_row, name, live_streams.get(name))
+        # Record each streamer's current live info (fresh dict prunes removed
+        # ones), then reflow the display so live streamers float to the top.
+        self._live_info = {s["name"].lower(): live_streams.get(s["name"].lower())
+                           for s in self.cfg.get("streamers", [])}
+        self.root.after(0, self._refresh_live_display)
 
         for name in live_now - self.opened - self.drops_pending:
             info = live_streams[name]
