@@ -29,6 +29,38 @@ from system_integration import is_run_on_startup, set_run_on_startup, create_des
 from notifications import notify, PLYER_AVAILABLE
 
 
+# Per-streamer behavior as one friendly "Mode" instead of two interacting
+# booleans (auto_open × drops_only). The flags stay the stored representation
+# (so the watch loop and existing configs are unchanged); Mode is just the UI.
+_MODE_TO_FLAGS = {                       # mode -> (auto_open, drops_only)
+    "Open when live":  (True,  False),
+    "Open on Drops":   (True,  True),
+    "Notify only":     (False, False),
+    "Notify on Drops": (False, True),
+}
+STREAMER_MODES = list(_MODE_TO_FLAGS)
+MODE_HELP = {
+    "Open when live":  "Opens the stream in your browser whenever they go live.",
+    "Open on Drops":   "Opens the stream only when they're live with “drops” in the title.",
+    "Notify only":     "Sends a notification when they go live — never opens the stream.",
+    "Notify on Drops": "Notifies you only when they're live with drops — never opens the stream.",
+}
+
+
+def mode_of(s):
+    """The friendly Mode name for a streamer dict (from its auto_open/drops_only)."""
+    flags = (s.get("auto_open", True), s.get("drops_only", False))
+    for mode, mf in _MODE_TO_FLAGS.items():
+        if mf == flags:
+            return mode
+    return "Open when live"
+
+
+def set_mode(s, mode):
+    """Write the auto_open/drops_only flags for a chosen Mode name."""
+    s["auto_open"], s["drops_only"] = _MODE_TO_FLAGS.get(mode, (True, False))
+
+
 class TwitchWatcherApp:
     def __init__(self, root):
         self.root = root
@@ -436,36 +468,32 @@ class TwitchWatcherApp:
         self.new_group_var = tk.StringVar(value=DEFAULT_GROUP)
         ttk.Entry(top, textvariable=self.new_group_var, width=14).pack(side=tk.LEFT, padx=4)
 
-        self.drops_only_var = tk.BooleanVar()
-        ttk.Checkbutton(top, text="Drops only", variable=self.drops_only_var).pack(side=tk.LEFT, padx=4)
-
-        # Auto-open defaults ON, so new streamers behave like before unless unticked
-        self.auto_open_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(top, text="Auto-open", variable=self.auto_open_var).pack(side=tk.LEFT, padx=4)
+        ttk.Label(top, text="Mode:").pack(side=tk.LEFT)
+        self.new_mode_var = tk.StringVar(value="Open when live")
+        ttk.Combobox(top, textvariable=self.new_mode_var, values=STREAMER_MODES,
+                     state="readonly", width=15).pack(side=tk.LEFT, padx=4)
 
         ttk.Button(top, text="Add", command=self._add_streamer).pack(side=tk.LEFT, padx=4)
 
-        cols = ("name", "group", "drops_only", "auto_open")
+        cols = ("name", "group", "mode")
         self.streamer_tree = ttk.Treeview(self.tab_stream, columns=cols, show="headings", height=13)
-        self.streamer_tree.heading("name",      text="Username")
-        self.streamer_tree.heading("group",     text="Group")
-        self.streamer_tree.heading("drops_only",text="Drops Only")
-        self.streamer_tree.heading("auto_open", text="Auto-Open")
-        self.streamer_tree.column("name",       width=190)
-        self.streamer_tree.column("group",      width=150)
-        self.streamer_tree.column("drops_only", width=90, anchor="center")
-        self.streamer_tree.column("auto_open",  width=90, anchor="center")
+        self.streamer_tree.heading("name",  text="Username")
+        self.streamer_tree.heading("group", text="Group")
+        self.streamer_tree.heading("mode",  text="Mode")
+        self.streamer_tree.column("name",  width=180)
+        self.streamer_tree.column("group", width=140)
+        self.streamer_tree.column("mode",  width=150, anchor="center")
         # Click a column header to sort the list by that column
         for _c in cols:
             self.streamer_tree.heading(_c, command=lambda c=_c: self._sort_streamer_column(c, False))
+        # Double-click a row to edit it
+        self.streamer_tree.bind("<Double-1>", lambda _e: self._edit_streamer())
         self.streamer_tree.pack(fill=tk.BOTH, expand=True, padx=8, pady=4)
 
         bot = ttk.Frame(self.tab_stream)
         bot.pack(fill=tk.X, padx=8, pady=4)
-        ttk.Button(bot, text="Toggle Drops Only", command=self._toggle_drops_only).pack(side=tk.LEFT, padx=4)
-        ttk.Button(bot, text="Toggle Auto-Open",  command=self._toggle_auto_open).pack(side=tk.LEFT, padx=4)
-        ttk.Button(bot, text="Edit Group",        command=self._edit_group).pack(side=tk.LEFT, padx=4)
-        ttk.Button(bot, text="Remove Selected",   command=self._remove_streamer).pack(side=tk.LEFT, padx=4)
+        ttk.Button(bot, text="Edit Streamer",   command=self._edit_streamer).pack(side=tk.LEFT, padx=4)
+        ttk.Button(bot, text="Remove Selected", command=self._remove_streamer).pack(side=tk.LEFT, padx=4)
 
     def _populate_streamers(self):
         self.streamer_tree.delete(*self.streamer_tree.get_children())
@@ -473,8 +501,7 @@ class TwitchWatcherApp:
             self.streamer_tree.insert("", tk.END, values=(
                 s["name"],
                 s.get("group", DEFAULT_GROUP) or DEFAULT_GROUP,
-                "Yes" if s.get("drops_only") else "No",
-                "Yes" if s.get("auto_open", True) else "No"
+                mode_of(s),
             ))
 
     def _sort_streamer_column(self, col, descending):
@@ -495,16 +522,12 @@ class TwitchWatcherApp:
         if name in [s["name"].lower() for s in self.cfg["streamers"]]:
             messagebox.showwarning("Duplicate", f"{name} is already in the list.")
             return
-        self.cfg["streamers"].append({
-            "name":      name,
-            "drops_only": self.drops_only_var.get(),
-            "auto_open": self.auto_open_var.get(),
-            "group":     group,
-        })
+        entry = {"name": name, "group": group}
+        set_mode(entry, self.new_mode_var.get())
+        self.cfg["streamers"].append(entry)
         save_config(self.cfg)
         self.new_streamer_var.set("")
-        self.drops_only_var.set(False)
-        self.auto_open_var.set(True)
+        self.new_mode_var.set("Open when live")
         self._populate_streamers()
         self._rebuild_live_rows()
         self._poll_soon()  # fill in the new streamer's status right away
@@ -520,61 +543,57 @@ class TwitchWatcherApp:
         self._rebuild_live_rows()
         self._poll_soon()
 
-    def _toggle_drops_only(self):
-        sel = self.streamer_tree.selection()
-        if not sel:
-            return
-        name = self.streamer_tree.item(sel[0])["values"][0].lower()
-        for s in self.cfg["streamers"]:
-            if s["name"].lower() == name:
-                s["drops_only"] = not s.get("drops_only", False)
-        save_config(self.cfg)
-        self._populate_streamers()
-
-    def _toggle_auto_open(self):
+    def _edit_streamer(self):
+        """Edit the selected streamer's Group and Mode together in one dialog."""
         sel = self.streamer_tree.selection()
         if not sel:
             return
         name = str(self.streamer_tree.item(sel[0])["values"][0]).lower()
-        for s in self.cfg["streamers"]:
-            if s["name"].lower() == name:
-                s["auto_open"] = not s.get("auto_open", True)
-        save_config(self.cfg)
-        self._populate_streamers()
-
-    def _edit_group(self):
-        """Pop a small dialog to rename the group for the selected streamer."""
-        sel = self.streamer_tree.selection()
-        if not sel:
+        s = next((x for x in self.cfg["streamers"] if x["name"].lower() == name), None)
+        if s is None:
             return
-        name          = self.streamer_tree.item(sel[0])["values"][0].lower()
-        current_group = self.streamer_tree.item(sel[0])["values"][1]
 
         dialog = tk.Toplevel(self.root)
-        dialog.title("Edit Group")
-        dialog.geometry("300x110")
+        dialog.title("Edit Streamer")
         dialog.resizable(False, False)
-        dialog.grab_set()  # modal
+        dialog.grab_set()
 
-        ttk.Label(dialog, text=f"Group for {name}:").pack(padx=12, pady=(12, 4), anchor="w")
-        group_var = tk.StringVar(value=current_group)
-        entry = ttk.Entry(dialog, textvariable=group_var, width=30)
-        entry.pack(padx=12, pady=4)
-        entry.select_range(0, tk.END)
-        entry.focus()
+        frm = ttk.Frame(dialog, padding=14)
+        frm.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Label(frm, text=name, font=("", 10, "bold")).grid(
+            row=0, column=0, columnspan=2, pady=(0, 8), sticky="w")
+
+        ttk.Label(frm, text="Group:").grid(row=1, column=0, sticky="e", padx=6, pady=6)
+        group_var = tk.StringVar(value=s.get("group", DEFAULT_GROUP) or DEFAULT_GROUP)
+        ge = ttk.Entry(frm, textvariable=group_var, width=24)
+        ge.grid(row=1, column=1, padx=6, pady=6, sticky="w")
+
+        ttk.Label(frm, text="Mode:").grid(row=2, column=0, sticky="e", padx=6, pady=6)
+        mode_var = tk.StringVar(value=mode_of(s))
+        cb = ttk.Combobox(frm, textvariable=mode_var, values=STREAMER_MODES, state="readonly", width=22)
+        cb.grid(row=2, column=1, padx=6, pady=6, sticky="w")
+
+        # Plain-language description of the selected mode, updates as you change it.
+        hint = ttk.Label(frm, text=MODE_HELP.get(mode_var.get(), ""), wraplength=300,
+                         foreground=self._pal["muted"], font=("", 8))
+        hint.grid(row=3, column=0, columnspan=2, padx=6, pady=(2, 8), sticky="w")
+        cb.bind("<<ComboboxSelected>>", lambda _e: hint.config(text=MODE_HELP.get(mode_var.get(), "")))
 
         def apply():
-            new_group = group_var.get().strip() or DEFAULT_GROUP
-            for s in self.cfg["streamers"]:
-                if s["name"].lower() == name:
-                    s["group"] = new_group
+            s["group"] = group_var.get().strip() or DEFAULT_GROUP
+            set_mode(s, mode_var.get())
             save_config(self.cfg)
             self._populate_streamers()
             self._rebuild_live_rows()
             dialog.destroy()
 
-        entry.bind("<Return>", lambda _: apply())
-        ttk.Button(dialog, text="Save", command=apply).pack(pady=6)
+        btns = ttk.Frame(frm)
+        btns.grid(row=4, column=0, columnspan=2, pady=(4, 0))
+        ttk.Button(btns, text="Save", command=apply, width=10).pack(side=tk.LEFT, padx=6)
+        ttk.Button(btns, text="Cancel", command=dialog.destroy, width=10).pack(side=tk.LEFT, padx=6)
+        ge.focus()
+        self._center_on_root(dialog)
 
     # -------------------------------------------------------------------------
     # Drops Games tab
