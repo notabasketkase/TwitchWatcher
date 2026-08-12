@@ -173,7 +173,9 @@ as older than 0.3.0; fixed by renaming the tag to `v0.3.1`.)*
   window. Completes silent set-and-forget: with run-on-startup + autostart-watching it boots, hides,
   and starts watching with no window flash. Settings toggle; on launch `withdraw()` the window if
   enabled (needs the tray available). Edge case: don't hide on first-run when there are no creds yet.
-- Live-Status "online-above-offline" sort still deferred to the v1 rehaul.
+- ✅ Live-Status "online-above-offline" sort — DONE 2026-08-11 on `ui-rehaul`, and then some: shipped as
+  a 4-mode **Live Status sort** preference (Live now section / Live first in groups / Grouped / Flat),
+  plus an optional status dot toggle. Reflows only when the live set changes.
 
 - ⭐ **Minimize to system tray — PRIORITY for the next v0.3.0 session.** Run quietly in the
   background, no taskbar clutter, with a tray right-click menu (Show / Quit). The most
