@@ -101,6 +101,7 @@ class TwitchWatcherApp:
         # Set to wake the watch loop early — for an immediate poll after a
         # streamer is added/removed, and for an instant Stop.
         self._poll_now           = threading.Event()
+        self._watch_gen          = 0    # bumped on each (re)start; retires any stale poll loop
         self.status_rows         = {}   # name -> dict of label widgets
         self._live_info          = {}   # name -> live info dict (or None) from the last poll
         self._rendered_live_set  = None # names currently shown in the "Live now" section
@@ -957,6 +958,11 @@ class TwitchWatcherApp:
                 return
             self._rebuild_live_rows()
             self.watching = True
+            # New generation → any still-running previous loop (e.g. from a fast
+            # stop→start around a wake) sees a stale gen and exits, so we never
+            # end up with two loops double-firing notifications/opens.
+            self._watch_gen += 1
+            gen = self._watch_gen
             # Restore the "already opened / already notified" memory from disk so
             # a restart doesn't re-pop streams that were already open before it.
             # (While running, a streamer going offline still clears them from this
@@ -969,7 +975,7 @@ class TwitchWatcherApp:
             self.toggle_btn.config(text="⏹  Stop Watching")
             self.status_var.set("Starting…")
             self._log("Watcher started.")
-            threading.Thread(target=self._poll_loop, daemon=True).start()
+            threading.Thread(target=self._poll_loop, args=(gen,), daemon=True).start()
 
     def _poll_soon(self):
         """Ask the watch loop to poll right now instead of waiting out the
@@ -977,11 +983,11 @@ class TwitchWatcherApp:
         if self.watching:
             self._poll_now.set()
 
-    def _poll_loop(self):
+    def _poll_loop(self, gen):
         client_id = self.cfg["client_id"]
         self.token = None
 
-        while self.watching:
+        while self.watching and gen == self._watch_gen:
             # (Re)acquire a token whenever we don't have one. A failure here —
             # e.g. the network isn't up yet after a wake, or the connection
             # dropped — no longer stops the watcher: we keep retrying until it
