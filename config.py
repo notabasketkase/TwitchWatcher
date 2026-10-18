@@ -10,7 +10,7 @@ import sys
 import json
 
 DEFAULT_GROUP = "General"
-APP_VERSION   = "0.3.1"
+APP_VERSION   = "1.0.0"
 GITHUB_REPO   = "notabasketkase/TwitchWatcher"
 
 # Where to store the user's config. When frozen by PyInstaller, __file__ points

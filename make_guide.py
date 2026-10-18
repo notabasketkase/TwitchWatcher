@@ -107,10 +107,10 @@ def build(path="TwitchWatcher_Setup_Guide.pdf"):
     s.append(Paragraph("Step 5 — Enter Your Credentials in TwitchWatcher", heading_style))
     s.append(bullets([
         "Open TwitchWatcher",
-        "Click the <b>Settings</b> tab",
+        "Open the <b>Settings</b> menu &#8594; <b>Twitch Credentials…</b>",
         "Paste your <b>Client ID</b> into the Client ID field",
         "Paste your <b>Client Secret</b> into the Client Secret field",
-        "Click <b>Save Settings</b>",
+        "Click <b>Save</b>",
     ]))
     s.append(Paragraph(
         "Your Client Secret is stored securely in <b>Windows Credential Manager</b> — the "
@@ -123,14 +123,16 @@ def build(path="TwitchWatcher_Setup_Guide.pdf"):
         "Type a Twitch username in the Username field",
         "Optionally assign a <b>Group</b> (e.g. &quot;Friends&quot;, &quot;Gamers&quot;, "
         "&quot;Drops&quot;) to keep things organised",
-        "Tick <b>Drops Only</b> if you only want alerts when that streamer has drops in their title",
+        "Choose a <b>Mode</b> for how you want to be alerted: <i>Open when live</i>, "
+        "<i>Open on Drops</i> (only when their title mentions drops), <i>Notify only</i>, "
+        "or <i>Notify on Drops</i>",
         "Click <b>Add</b> or press Enter",
     ]))
 
     s.append(Paragraph("Step 7 — Start Watching", heading_style))
     s.append(bullets([
         "Click <b>Start Watching</b> at the bottom of the app",
-        "TwitchWatcher will check Twitch every 5 minutes (configurable in Settings)",
+        "TwitchWatcher will check Twitch every 5 minutes (configurable in <b>Preferences</b>)",
         "When a streamer goes live you'll get a Windows notification and their channel "
         "opens in your browser",
     ]))
@@ -139,10 +141,15 @@ def build(path="TwitchWatcher_Setup_Guide.pdf"):
     s.append(Paragraph("If you want TwitchWatcher to start watching automatically every "
                        "time you open it:", body_style))
     s.append(bullets([
-        "Go to <b>Settings</b>",
+        "Go to the <b>Preferences</b> tab",
         "Tick <b>Start watching automatically when app opens</b>",
-        "Click <b>Save Settings</b>",
+        "Click <b>Save Preferences</b>",
     ]))
+    s.append(Paragraph(
+        "To have TwitchWatcher open automatically every time Windows starts, also tick "
+        "<b>Launch TwitchWatcher when Windows starts</b> in <b>Preferences</b> and Save. "
+        "Pair it with the option above and it runs hands-free — no need to remember to "
+        "open it.", body_style))
 
     # ----- FAQ -----
     s.append(Paragraph("FAQ", heading_style))
@@ -165,10 +172,10 @@ def build(path="TwitchWatcher_Setup_Guide.pdf"):
     for q, a in [
         ("&quot;Auth error: 403&quot;",
          "Your Client ID or Secret is wrong. Double-check you copied them correctly with "
-         "no extra spaces. Go to Settings, re-enter both, and save again."),
+         "no extra spaces. Open <b>Settings &#8594; Twitch Credentials…</b>, re-enter both, and save again."),
         ("&quot;Auth error: 401&quot;",
          "Your token expired or your Secret was regenerated on the Twitch side. Go to "
-         "dev.twitch.tv, generate a new Secret, paste it into Settings, and save."),
+         "dev.twitch.tv, generate a new Secret, paste it into <b>Settings &#8594; Twitch Credentials…</b>, and save."),
         ("Windows blocked the app / said it's a virus",
          "TwitchWatcher is not signed with a paid developer certificate, so Windows "
          "Defender may flag it as unknown publisher. This is normal for indie tools. "
