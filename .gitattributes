@@ -1,0 +1,9 @@
+# Treat these as binary — never apply line-ending (CRLF/LF) conversion,
+# which would corrupt them. The Setup Guide PDF and icons are the ones that bit us.
+*.pdf binary
+*.ico binary
+*.png binary
+*.exe binary
+
+# Python source: normalize to LF in the repo (avoids the CRLF warnings on commit)
+*.py text eol=lf
