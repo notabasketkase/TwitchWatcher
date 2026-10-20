@@ -34,6 +34,7 @@ DEFAULT_CONFIG = {
     "theme": "dark",        # "dark" | "light" | "system" (dark-first: no bright flash on launch)
     "show_status_dot": True,  # colored live/offline dot in the Live Status rows
     "live_sort": "section",   # section | group | grouped | flat (see ui.LIVE_SORT_MODES)
+    "stream_browser": "default",  # "default" (OS default) | "firefox" (can autoplay WITH sound)
 }
 
 

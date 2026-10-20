@@ -56,6 +56,20 @@ LIVE_SORT_MODES = {
 }
 _LIVE_SORT_LABEL = {v: k for k, v in LIVE_SORT_MODES.items()}
 
+# Which browser auto-opened streams open in. Firefox is offered because — unlike
+# every Chromium browser (Brave/Chrome/Edge/Opera), which force-mute auto-opened
+# tabs — Firefox can be set to autoplay WITH sound.
+STREAM_BROWSERS = {
+    "Default browser":            "default",
+    "Firefox (plays with sound)": "firefox",
+}
+_STREAM_BROWSER_LABEL = {v: k for k, v in STREAM_BROWSERS.items()}
+_FIREFOX_PATHS = [
+    r"C:\Program Files\Mozilla Firefox\firefox.exe",
+    r"C:\Program Files (x86)\Mozilla Firefox\firefox.exe",
+    os.path.expandvars(r"%LOCALAPPDATA%\Mozilla Firefox\firefox.exe"),
+]
+
 
 def mode_of(s):
     """The friendly Mode name for a streamer dict (from its auto_open/drops_only)."""
@@ -75,7 +89,7 @@ class TwitchWatcherApp:
     def __init__(self, root):
         self.root = root
         self.root.title(f"Twitch Watcher v{APP_VERSION}")
-        self.root.geometry("700x580")
+        self.root.geometry("720x700")
 
         # Set the window/taskbar icon (falls back silently if not found).
         # When frozen, icon.ico is bundled and extracted to sys._MEIPASS.
@@ -262,6 +276,15 @@ class TwitchWatcherApp:
         save_config(self.cfg)
         self._rebuild_live_rows()
 
+    def _on_stream_browser_change(self):
+        """Pick which browser auto-opened streams open in; persist it."""
+        choice = STREAM_BROWSERS.get(self.stream_browser_var.get(), "default")
+        self.cfg["stream_browser"] = choice
+        save_config(self.cfg)
+        if choice == "firefox" and not self._firefox_path():
+            messagebox.showwarning("Firefox not found",
+                "Couldn't find Firefox installed — streams will open in your default browser instead.")
+
     def _set_theme(self, choice):
         """Persist the theme choice and apply it immediately across the app."""
         self.cfg["theme"] = choice
@@ -409,7 +432,7 @@ class TwitchWatcherApp:
             tl = ttk.Label(self.live_frame, text="—", width=28)
             vl = ttk.Label(self.live_frame, text="—", width=8)
             ob = ttk.Button(self.live_frame, text="Open", width=5,
-                            command=lambda n=name: webbrowser.open(f"https://twitch.tv/{n}"))
+                            command=lambda n=name: self._open_stream(n))
             r, c = self._row_cursor, 0
             ob.grid(row=r, column=c, padx=6, pady=1); c += 1
             row = {"name": nl, "game": gl, "title": tl, "viewers": vl}
@@ -775,6 +798,22 @@ class TwitchWatcherApp:
         sort_cb.grid(row=2, column=1, columnspan=3, sticky="w", padx=6, pady=(0, 8))
         sort_cb.bind("<<ComboboxSelected>>", lambda _e: self._on_sort_change())
 
+        f4 = ttk.LabelFrame(self.tab_prefs, text="Streams")
+        f4.pack(fill=tk.X, padx=12, pady=6)
+        ttk.Label(f4, text="Open streams in:").grid(row=0, column=0, sticky="w", padx=6, pady=6)
+        self.stream_browser_var = tk.StringVar(
+            value=_STREAM_BROWSER_LABEL.get(self.cfg.get("stream_browser", "default"), "Default browser"))
+        sbcb = ttk.Combobox(f4, textvariable=self.stream_browser_var, values=list(STREAM_BROWSERS),
+                            state="readonly", width=24)
+        sbcb.grid(row=0, column=1, sticky="w", padx=6, pady=6)
+        sbcb.bind("<<ComboboxSelected>>", lambda _e: self._on_stream_browser_change())
+        sb_note = ttk.Label(f4, wraplength=520, foreground=self._pal["muted"], font=("", 8),
+                            text=("Chromium browsers (Brave/Chrome/Edge) force-mute auto-opened tabs. "
+                                  "Firefox can play with sound — set its Autoplay to “Allow Audio and "
+                                  "Video”."))
+        sb_note.grid(row=1, column=0, columnspan=2, sticky="w", padx=6, pady=(0, 6))
+        self._muted_labels.append(sb_note)
+
         btn_row = ttk.Frame(self.tab_prefs)
         btn_row.pack(fill=tk.X, padx=12, pady=10)
         ttk.Button(btn_row, text="Save Preferences", command=self._save_preferences).pack(side=tk.LEFT)
@@ -798,6 +837,8 @@ class TwitchWatcherApp:
         self.theme_var.set(self.cfg.get("theme", "dark"))
         self.show_dot_var.set(self.cfg.get("show_status_dot", True))
         self.sort_var.set(_LIVE_SORT_LABEL.get(self.cfg.get("live_sort", "section"), "Live now section"))
+        self.stream_browser_var.set(
+            _STREAM_BROWSER_LABEL.get(self.cfg.get("stream_browser", "default"), "Default browser"))
 
     def _save_preferences(self):
         self.cfg["poll_interval"] = self.interval_var.get()
@@ -983,6 +1024,30 @@ class TwitchWatcherApp:
         if self.watching:
             self._poll_now.set()
 
+    def _firefox_path(self):
+        """Path to firefox.exe if installed, else None."""
+        for p in _FIREFOX_PATHS:
+            if os.path.exists(p):
+                return p
+        return None
+
+    def _open_stream(self, name):
+        """Open a streamer's Twitch page in the user's chosen browser. Firefox
+        can be set to autoplay with sound; Chromium browsers force-mute
+        auto-opened tabs. Falls back to the default browser if Firefox is
+        selected but not found."""
+        url = f"https://twitch.tv/{name}"
+        if self.cfg.get("stream_browser", "default") == "firefox":
+            ff = self._firefox_path()
+            if ff:
+                try:
+                    import subprocess
+                    subprocess.Popen([ff, url])
+                    return
+                except Exception:
+                    pass  # fall through to the default browser
+        webbrowser.open(url)
+
     def _poll_loop(self, gen):
         client_id = self.cfg["client_id"]
         self.token = None
@@ -1065,7 +1130,7 @@ class TwitchWatcherApp:
                 self._log(f"[{ts}] {name} LIVE — notify only (auto-open off). ({info['title']})")
             else:
                 self._log(f"[{ts}] {name} LIVE — opening browser. ({info['title']})")
-                webbrowser.open(f"https://twitch.tv/{name}")
+                self._open_stream(name)
             self.opened.add(name)
 
         # Check drops_pending streamers — did they add drops to their title?
@@ -1079,7 +1144,7 @@ class TwitchWatcherApp:
                     self._log(f"[{ts}] {name} added drops — notify only (auto-open off). ({info['title']})")
                 else:
                     self._log(f"[{ts}] {name} added drops! Opening browser. ({info['title']})")
-                    webbrowser.open(f"https://twitch.tv/{name}")
+                    self._open_stream(name)
                 self.drops_pending.discard(name)
                 self.opened.add(name)
 
