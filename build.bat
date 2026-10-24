@@ -21,6 +21,7 @@ python -m PyInstaller --noconfirm --clean --onefile --windowed ^
   --hidden-import keyring.backends.Windows ^
   --hidden-import pystray._win32 ^
   --collect-all sv_ttk ^
+  --exclude-module numpy ^
   "twitch_live_watch.py"
 
 echo.
